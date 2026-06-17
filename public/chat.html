@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Blue Rocket Dashboard</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
+    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; }
+    .main { width: 75%; display: flex; flex-direction: column; background: #000814; }
+    .box { flex-grow: 1; padding: 20px; overflow-y: auto; }
+    .input-bar { padding: 15px; display: flex; gap: 10px; background: #1b263b; }
+    input { flex-grow: 1; padding: 10px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <div class="side">
+    <h3 id="nameTag">🚀 User</h3>
+    <button onclick="addFriend()" style="width:100%; padding:8px; background:#38b000; color:white; border:none; border-radius:5px;">+ Add Friend</button>
+    <div id="friends" style="margin-top:15px;"></div>
+  </div>
+  <div class="main">
+    <div id="target" style="padding:15px; background:#1b263b;">No active room</div>
+    <div class="box" id="window"></div>
+    <div class="input-bar">
+      <input type="text" id="msg" placeholder="Chat securely...">
+      <button onclick="send()" style="padding:10px 20px; background:#00b4d8; color:white; border:none; border-radius:5px;">Send</button>
+      <button onclick="wipe()" style="padding:10px; background:#d90429; color:white; border:none; border-radius:5px;">Wipe</button>
+    </div>
+  </div>
+  <script>
+    const socket = io();
+    const me = localStorage.getItem('username');
+    let peer = '';
+    document.getElementById('nameTag').innerText = `🚀 ${me}`;
+    socket.emit('join', me);
+
+    function addFriend() {
+      const name = prompt("Friend username:");
+      if(!name) return;
+      const d = document.createElement('div');
+      d.innerText = name;
+      d.style.padding = "10px";
+      d.style.background = "#415a77";
+      d.style.margin = "5px 0";
+      d.style.borderRadius = "5px";
+      d.style.cursor = "pointer";
+      d.onclick = () => { peer = name; document.getElementById('target').innerText = `Room: ${name}`; document.getElementById('window').innerHTML=''; };
+      document.getElementById('friends').appendChild(d);
+    }
+    function send() {
+      const txt = document.getElementById('msg').value;
+      if(!txt || !peer) return;
+      show(txt, 'right');
+      socket.emit('private_message', { sender: me, receiver: peer, message: txt });
+      document.getElementById('msg').value = '';
+    }
+    socket.on('new_message', data => { if(data.sender === peer) show(data.message, 'left'); });
+    function show(t, side) {
+      const el = document.createElement('div');
+      el.innerText = t;
+      el.style.textAlign = side === 'right' ? 'right' : 'left';
+      el.style.margin = "10px 0";
+      document.getElementById('window').appendChild(el);
+    }
+    async function wipe() {
+      if(!peer) return;
+      await fetch('/api/messages/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ sender: me, receiver: peer })
+      });
+      document.getElementById('window').innerHTML = '';
+      alert('Conversation wiped clear!');
+    }
+  </script>
+</body>
+</html>
