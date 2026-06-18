@@ -26,42 +26,40 @@ const transporter = nodemailer.createTransport({
   auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 });
 
-// SIGN UP ROUTE
+// SIGN UP ROUTE (No Emails, No Alerts, Pure Redirect)
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
     const existing = await User.findOne({ $or: [{ email }, { username }] });
-    if (existing) return res.status(400).json({ error: 'Username/Email taken' });
+    if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const newUser = new User({ username, email, password: hashedPassword, verificationCode: code });
+    // Save the user with a permanent universal verification token string
+    const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999" });
     await newUser.save();
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: '🚀 Your Blue Rocket Verification Code',
-      text: `Your code is: ${code}`
-    });
-
-    res.status(201).json({ message: 'Code sent!' });
+    res.status(201).json({ message: 'User created successfully!' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// VERIFICATION ROUTE
+// EMAIL CODE VERIFICATION
 app.post('/api/verify', async (req, res) => {
-  const { email, code } = req.body;
-  const user = await User.findOne({ email });
-  if (user && user.verificationCode === code) {
-    user.isVerified = true;
-    user.verificationCode = null;
-    await user.save();
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
-    return res.json({ success: true, token, username: user.username });
-  }
-  res.status(400).json({ success: false, message: 'Invalid Code' });
+  try {
+    const { email, code } = req.body;
+    const user = await User.findOne({ email });
+
+    // Validate against the fixed keycode
+    if (user && (user.verificationCode === code || code === "777999")) {
+      user.isVerified = true;
+      user.verificationCode = null; 
+      await user.save();
+
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ success: true, token, username: user.username });
+    }
+    res.status(400).json({ success: false, message: 'Invalid or expired verification code.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // 2B. NATIVE ACCOUNT LOGIN ROUTE
