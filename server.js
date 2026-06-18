@@ -13,7 +13,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
-app.use(express.json());
+// Increase JSON payload limits so large Base64 images/files don't get cut off
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public')); 
 
 mongoose.connect(process.env.MONGO_URI)
@@ -185,7 +187,7 @@ app.get('/api/friends-data/:username', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 6. FETCH CHAT HISTORY
+// 6. FETCH CHAT HISTORY (Loads message text, image strings, and files)
 app.get('/api/messages/:user1/:user2', async (req, res) => {
   try {
     const { user1, user2 } = req.params;
@@ -211,11 +213,31 @@ app.post('/api/messages/delete', async (req, res) => {
 io.on('connection', (socket) => {
   socket.on('join', (username) => socket.join(username));
   
+  // Updated pipeline to relay and save file/image streams along with standard texts
   socket.on('private_message', async (data) => {
-    const { sender, receiver, message } = data;
-    const record = new Message({ sender, receiver, message });
-    await record.save();
-    io.to(receiver).emit('new_message', { sender, message });
+    const { sender, receiver, message, fileData, fileType, fileName } = data;
+    
+    try {
+      const record = new Message({ 
+        sender, 
+        receiver, 
+        message: message || "", 
+        fileData: fileData || null,
+        fileType: fileType || null,
+        fileName: fileName || null
+      });
+      await record.save();
+      
+      io.to(receiver).emit('new_message', { 
+        sender, 
+        message,
+        fileData,
+        fileType,
+        fileName
+      });
+    } catch (err) {
+      console.error("Failed to process message attachment:", err);
+    }
   });
 
   socket.on('trigger_wipe', (data) => {
