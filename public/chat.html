@@ -13,10 +13,18 @@
     input { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
     button { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
     .friend-btn { width: 100%; padding: 10px; background: #0077b6; color: white; margin-bottom: 15px; }
-    .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+    
+    /* Layout styling blocks */
+    .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
     .friend-item:hover { background: #0077b6; }
     .req-item { padding: 10px; background: #5c677d; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
-    .accept-btn { background: #38b000; color: white; padding: 4px 8px; font-size: 12px; }
+    
+    /* Action Buttons styling */
+    .accept-btn { background: #38b000; color: white; padding: 4px 8px; font-size: 12px; margin-right: 5px; border-radius: 3px; }
+    .decline-btn { background: #e63946; color: white; padding: 4px 8px; font-size: 12px; border-radius: 3px; }
+    .delete-btn { background: #d90429; color: white; padding: 4px 8px; font-size: 11px; border-radius: 3px; opacity: 0.7; transition: 0.2s; }
+    .delete-btn:hover { opacity: 1; }
+    
     .send-btn { background: #00b4d8; color: white; }
     .wipe-btn { background: #d90429; color: white; }
     h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
@@ -51,19 +59,16 @@
     document.getElementById('nameTag').innerText = `🚀 ${me}`;
     socket.emit('join', me);
 
-    // Initial Database Synchronization Call
     loadDashboardData();
 
     async function loadDashboardData() {
       const res = await fetch(`/api/friends-data/${me}`);
       const data = await res.json();
       
-      // 1. Render Friends
       const friendsContainer = document.getElementById('friendsBox');
       friendsContainer.innerHTML = ''; 
       data.friends.forEach(name => appendFriendDOM(name));
 
-      // 2. Render Incoming Pending Requests
       const requestsContainer = document.getElementById('requestsBox');
       requestsContainer.innerHTML = ''; 
       data.requests.forEach(name => appendRequestDOM(name));
@@ -93,25 +98,69 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
       });
+      if(res.ok) {
+        loadDashboardData();
+        alert(`You are now friends with ${senderName}!`);
+      }
+    }
+
+    // 🚀 NEW: DECLINE INCOMING FRIEND REQUEST ENGINE
+    async function declineRequest(senderName) {
+      const res = await fetch('/api/friends/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
+      });
+      if(res.ok) {
+        loadDashboardData();
+        alert(`Friend request from ${senderName} removed.`);
+      }
+    }
+
+    // 🚀 NEW: MUTUAL FRIEND DELETE SYSTEM
+    async function deleteFriend(event, friendName) {
+      event.stopPropagation(); // Prevents clicking the delete button from opening the chat window
+      const confirmDelete = confirm(`Are you sure you want to completely remove ${friendName} from your friends?`);
+      if (!confirmDelete) return;
+
+      const res = await fetch('/api/friends/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, friendUsername: friendName })
+      });
 
       if(res.ok) {
-        loadDashboardData(); // Re-sync components locally
-        alert(`You are now friends with ${senderName}!`);
+        // If we are currently chatting with the person we deleted, close the chat window
+        if (peer === friendName) {
+          peer = '';
+          document.getElementById('target').innerText = 'No active chat';
+          document.getElementById('window').innerHTML = '';
+        }
+        loadDashboardData();
+        alert(`${friendName} has been removed from your connections.`);
       }
     }
 
     function appendFriendDOM(name) {
       const d = document.createElement('div');
       d.className = 'friend-item';
-      d.innerText = name;
       d.onclick = () => { selectFriend(name); };
+      
+      // Inject friend name text and a floating red delete button
+      d.innerHTML = `<span>${name}</span> <button class="delete-btn" onclick="deleteFriend(event, '${name}')">Remove</button>`;
       document.getElementById('friendsBox').appendChild(d);
     }
 
     function appendRequestDOM(name) {
       const d = document.createElement('div');
       d.className = 'req-item';
-      d.innerHTML = `<span>${name}</span> <button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button>`;
+      d.innerHTML = `
+        <span>${name}</span> 
+        <div>
+          <button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button>
+          <button class="decline-btn" onclick="declineRequest('${name}')">Decline</button>
+        </div>
+      `;
       document.getElementById('requestsBox').appendChild(d);
     }
 
@@ -141,10 +190,19 @@
       if(data.sender === peer) show(data.message, 'left'); 
     });
 
-    // 🚀 NEW INTERFACE REALTIME CHANNEL LISTENERS
     socket.on('incoming_request', () => { loadDashboardData(); });
     socket.on('request_accepted', () => { loadDashboardData(); });
     
+    // 🚀 NEW: Listens for real-time removal flags from ex-friends
+    socket.on('friend_deleted', (data) => {
+      if (data.by === peer) {
+        peer = '';
+        document.getElementById('target').innerText = 'No active chat';
+        document.getElementById('window').innerHTML = '';
+      }
+      loadDashboardData();
+    });
+
     socket.on('chat_wiped', (data) => {
       if (data.wipedBy === peer) {
         document.getElementById('window').innerHTML = '';
