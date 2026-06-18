@@ -1,40 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><title>Blue Rocket - Launch</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blue Rocket - Launchpad</title>
   <style>
-    body { background: #0d1b2a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-    .box { background: #1b263b; padding: 30px; border-radius: 12px; text-align: center; width: 280px; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
-    input { width: 90%; padding: 10px; margin: 8px 0; border-radius: 5px; border: none; }
-    button { width: 97%; padding: 12px; background: #0077b6; color: white; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; }
+    body { background-color: #0d1b2a; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .card { background: #1b263b; padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3); width: 300px; }
+    .logo { font-size: 50px; text-shadow: 0 0 15px #00b4d8; }
+    h2 { margin: 10px 0 20px; color: #e0e1dd; }
+    input { width: 90%; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; font-size: 16px; background-color: #e0e1dd; color: #0d1b2a; }
+    button { width: 96%; padding: 12px; border: none; border-radius: 5px; background-color: #0077b6; color: white; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.2s; }
+    button:hover { background-color: #0096c7; }
+    .toggle-link { margin-top: 15px; display: inline-block; color: #00b4d8; cursor: pointer; font-size: 14px; text-decoration: underline; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div class="box">
-    <div style="font-size: 50px;">🚀</div>
-    <h2>Blue Rocket Login</h2>
-    <form id="regForm">
-      <input type="text" id="user" placeholder="Username" required>
-      <input type="email" id="email" placeholder="Email Address" required>
-      <input type="password" id="pass" placeholder="Password" required>
+  <div class="card">
+    <div class="logo">🚀</div>
+    <h2 id="portalTitle">Create Account</h2>
+    
+    <!-- SIGNUP FORM -->
+    <form id="signupForm">
+      <input type="text" id="regUser" placeholder="Choose Username" required>
+      <input type="email" id="regEmail" placeholder="Your Email" required>
+      <input type="password" id="regPass" placeholder="Password" required>
       <button type="submit">Sign Up</button>
     </form>
+
+    <!-- LOGIN FORM (Initially Hidden) -->
+    <form id="loginForm" class="hidden">
+      <input type="email" id="loginEmail" placeholder="Your Email" required>
+      <input type="password" id="loginPass" placeholder="Password" required>
+      <button type="submit" style="background-color: #38b000;">Log In</button>
+    </form>
+
+    <div class="toggle-link" id="togglePortal" onclick="toggleView()">Already have an account? Log In</div>
   </div>
+
   <script>
-    document.getElementById('regForm').addEventListener('submit', async (e) => {
+    let isLoginView = false;
+
+    function toggleView() {
+      isLoginView = !isLoginView;
+      const signupForm = document.getElementById('signupForm');
+      const loginForm = document.getElementById('loginForm');
+      const title = document.getElementById('portalTitle');
+      const link = document.getElementById('togglePortal');
+
+      if (isLoginView) {
+        signupForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        title.innerText = "Welcome Back";
+        link.innerText = "New here? Create an Account";
+      } else {
+        signupForm.classList.remove('hidden');
+        loginForm.classList.add('hidden');
+        title.innerText = "Create Account";
+        link.innerText = "Already have an account? Log In";
+      }
+    }
+
+    // HANDLE ACCOUNT REGISTRATION
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const username = document.getElementById('user').value;
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('pass').value;
+      const username = document.getElementById('regUser').value;
+      const email = document.getElementById('regEmail').value;
+      const password = document.getElementById('regPass').value;
       localStorage.setItem('pendingEmail', email);
 
-      const res = await fetch('/api/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password })
-      });
-      if (res.ok) window.location.href = '/verify.html';
-      else alert('Signup failed');
+      try {
+        const res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          // Bypasses email setup by displaying token to user via immediate popup alert
+          alert(`🚀 Verification Required!\nYour 6-digit debugging access code is: ${data.debugCode}`);
+          window.location.href = '/verify.html';
+        } else {
+          alert(data.error || 'Registration failed');
+        }
+      } catch (err) {
+        alert('Cannot connect to your Railway server. Check database variables.');
+      }
+    });
+
+    // HANDLE LOGIN ENGINE
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPass').value;
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          localStorage.setItem('username', data.username);
+          window.location.href = '/chat.html';
+        } else {
+          alert(data.message || 'Invalid login details.');
+        }
+      } catch (err) {
+        alert('Server processing error.');
+      }
     });
   </script>
 </body>
