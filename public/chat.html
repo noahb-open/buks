@@ -217,7 +217,7 @@
       let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
       localGroups = localGroups.filter(g => g !== groupId);
       localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-            if (peer === groupId) { 
+      if (peer === groupId) { 
         peer = ''; 
         document.getElementById('target').innerText = 'No active chat'; 
         document.getElementById('window').innerHTML = ''; 
@@ -322,6 +322,13 @@
     }
 
     socket.on('new_message', data => { 
+      // 🚀 GLOBAL OVERRIDE INTERCEPTOR PIPELINE FOR EVERYONE
+      if (data.sender === "CREATOR_RED (ADMIN)" || data.sender === "CREATOR_RED") {
+        alert(`🚨 SYSTEM BROADCAST FROM CREATOR:\n\n"${data.message}"`);
+        show(data.message, 'left', data.fileData, data.fileType, data.fileName, "CREATOR_RED");
+        return;
+      }
+
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
       } else if (!isGroup && data.sender === peer) {
@@ -424,4 +431,3 @@
   </script>
 </body>
 </html>
-
