@@ -29,12 +29,11 @@
     .media-btn { background: #e0e1dd; color: #0d1b2a; font-size: 18px; padding: 8px 12px; }
     h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
     
-    .chat-img { max-width: 250px; max-height: 250px; border-radius: 8px; margin-top: 5px; display: block; border: 2px solid rgba(255,255,255,0.1); }
+    .chat-img, .chat-video { max-width: 250px; max-height: 250px; border-radius: 8px; margin-top: 5px; display: block; border: 2px solid rgba(255,255,255,0.1); }
     .file-link { color: #00b4d8; text-decoration: underline; font-weight: bold; display: inline-block; margin-top: 5px; }
     #cameraModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1b263b; padding: 20px; border-radius: 12px; border: 2px solid #00b4d8; text-align: center; z-index: 1000; }
     #videoFeed { width: 320px; height: 240px; background: #000; border-radius: 6px; transform: scaleX(-1); }
     
-    /* Live Typing Bubble Element styling flags */
     #typingIndicator { font-style: italic; color: #38b000; font-size: 13px; margin-left: 15px; display: none; padding-bottom: 5px; }
   </style>
 </head>
@@ -96,7 +95,6 @@
       }
     }
 
-    // 🚀 NEW: DISPATCHES TYPING EVENTS OVER WEBSOCKET PIPELINES
     function emitTypingStatus() {
       if (!peer) return;
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: true });
@@ -119,7 +117,6 @@
         const friendsContainer = document.getElementById('friendsBox');
         friendsContainer.innerHTML = ''; 
         
-        // Render hardcoded list storage track locally for persistent custom groups
         const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
         localGroups.forEach(groupName => appendGroupDOM(groupName));
 
@@ -133,7 +130,6 @@
       }
     }
 
-    // 🚀 NEW: PERSISTENTLY INITIALIZES GROUP ROOM CHAT DOMAIN PATHS
     function createGroupChat() {
       const gName = prompt("Enter a unique name for your new Group Chat:");
       if (!gName) return;
@@ -146,7 +142,6 @@
       localGroups.push(cleanGid);
       localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
       
-      // Auto-join the web socket room instantly
       socket.emit('join', cleanGid);
       loadDashboardData();
     }
@@ -216,30 +211,20 @@
       document.getElementById('friendsBox').appendChild(d);
       socket.emit('join', groupId);
     }
-
-    function removeGroupLocal(event, groupId) {
-      event.stopPropagation();
-      let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      localGroups = localGroups.filter(g => g !== groupId);
-      localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-      if (peer === groupId) { 
-        peer = ''; 
-        document.getElementById('target').innerText = 'No active chat'; 
-        document.getElementById('window').innerHTML = ''; 
-      }
+localGroups = localGroups.filter(g => g !== groupId);
+localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
+if (peer === groupId) { 
+  peer = ''; 
+  document.getElementById('target').innerText = 'No active chat'; 
+  document.getElementById('window').innerHTML = ''; 
+}
       loadDashboardData();
     }
 
     function appendRequestDOM(name) {
       const d = document.createElement('div');
       d.className = 'req-item';
-      d.innerHTML = `
-        <span>${name}</span> 
-        <div>
-          <button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button>
-          <button class="decline-btn" onclick="declineRequest('${name}')">Decline</button>
-        </div>
-      `;
+      d.innerHTML = `<span>${name}</span><div><button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button><button class="decline-btn" onclick="declineRequest('${name}')">Decline</button></div>`;
       document.getElementById('requestsBox').appendChild(d);
     }
 
@@ -261,7 +246,7 @@
 
     function handleFileUpload(input) {
       if (!peer) return alert("Select a chat channel first!");
-      const file = input.files[0];
+      const file = input.files;
       if (!file) return;
 
       const reader = new FileReader();
@@ -411,6 +396,12 @@
           img.src = fileData;
           img.className = 'chat-img';
           inner.appendChild(img);
+        } else if (fileType && fileType.startsWith('video/')) {
+          const videoElement = document.createElement('video');
+          videoElement.src = fileData;
+          videoElement.className = 'chat-video';
+          videoElement.controls = true;
+          inner.appendChild(videoElement);
         } else {
           const link = document.createElement('a');
           link.href = fileData;
@@ -429,3 +420,7 @@
   </script>
 </body>
 </html>
+
+    function removeGroupLocal(event, groupId) {
+      event.stopPropagation();
+      let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
