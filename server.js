@@ -20,7 +20,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
 
-// 1. SIGN UP ROUTE (No Emails, Pure Redirect with Static Code)
+// 1. SIGN UP ROUTE
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -28,8 +28,6 @@ app.post('/api/signup', async (req, res) => {
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Save user with the permanent universal verification passcode
     const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999" });
     await newUser.save();
 
@@ -71,7 +69,7 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. ADD FRIEND ROUTE (Mutual Addition Setup)
+// 4. ADD FRIEND ROUTE (Mutual)
 app.post('/api/friends/add', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
@@ -86,17 +84,13 @@ app.post('/api/friends/add', async (req, res) => {
     }
 
     const me = await User.findOne({ username: myUsername });
-    
-    // Check if you are already friends
     if (me.friends.includes(friendUsername)) {
       return res.status(400).json({ error: "This user is already on your friend list!" });
     }
 
-    // MUTUAL LINK: Add the friend to your list
     me.friends.push(friendUsername);
     await me.save();
 
-    // MUTUAL LINK: Automatically add yourself to their list if not already there
     if (!targetFriend.friends.includes(myUsername)) {
       targetFriend.friends.push(myUsername);
       await targetFriend.save();
@@ -114,7 +108,21 @@ app.get('/api/friends/:username', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 6. WIPE CHAT HISTORY ROUTE (Snapchat Style)
+// 6. FETCH CHAT HISTORY (Forces history to stay until manual wipe) [1]
+app.get('/api/messages/:user1/:user2', async (req, res) => {
+  try {
+    const { user1, user2 } = req.params;
+    const history = await Message.find({
+      $or: [
+        { sender: user1, receiver: user2 },
+        { sender: user2, receiver: user1 }
+      ]
+    }).sort({ timestamp: 1 });
+    res.json(history);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 7. WIPE CHAT HISTORY ROUTE (Triggered ONLY by manual button) [1]
 app.post('/api/messages/delete', async (req, res) => {
   try {
     const { sender, receiver } = req.body;
@@ -125,7 +133,7 @@ app.post('/api/messages/delete', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// REAL-TIME WEBSOCKET CHAT MECHANISM
+// REAL-TIME WEBSOCKET PIPELINE
 io.on('connection', (socket) => {
   socket.on('join', (username) => socket.join(username));
   
@@ -134,6 +142,11 @@ io.on('connection', (socket) => {
     const record = new Message({ sender, receiver, message });
     await record.save();
     io.to(receiver).emit('new_message', { sender, message });
+  });
+
+  socket.on('trigger_wipe', (data) => {
+    const { sender, receiver } = data;
+    io.to(receiver).emit('chat_wiped', { wipedBy: sender });
   });
 });
 
