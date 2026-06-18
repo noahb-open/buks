@@ -69,13 +69,13 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. ADD FRIEND ROUTE (Mutual)
-app.post('/api/friends/add', async (req, res) => {
+// 4. SEND FRIEND REQUEST ROUTE (Instead of immediate direct add)
+app.post('/api/friends/request', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
 
     if (myUsername === friendUsername) {
-      return res.status(400).json({ error: "You cannot add yourself as a friend!" });
+      return res.status(400).json({ error: "You cannot add yourself!" });
     }
 
     const targetFriend = await User.findOne({ username: friendUsername });
@@ -84,45 +84,76 @@ app.post('/api/friends/add', async (req, res) => {
     }
 
     const me = await User.findOne({ username: myUsername });
+    
     if (me.friends.includes(friendUsername)) {
       return res.status(400).json({ error: "This user is already on your friend list!" });
     }
 
-    me.friends.push(friendUsername);
-    await me.save();
-
-    if (!targetFriend.friends.includes(myUsername)) {
-      targetFriend.friends.push(myUsername);
-      await targetFriend.save();
+    if (targetFriend.requests.includes(myUsername)) {
+      return res.status(400).json({ error: "Friend request already pending!" });
     }
+
+    // Push into their pending incoming requests folder array
+    targetFriend.requests.push(myUsername);
+    await targetFriend.save();
+
+    // Notify target in real time if they are online via websockets
+    io.to(friendUsername).emit('incoming_request', { from: myUsername });
+
+    res.json({ success: true, message: "Request sent!" });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 4B. ACCEPT FRIEND REQUEST ROUTE
+app.post('/api/friends/accept', async (req, res) => {
+  try {
+    const { myUsername, requesterUsername } = req.body;
+
+    const me = await User.findOne({ username: myUsername });
+    const requester = await User.findOne({ username: requesterUsername });
+
+    if (!me || !requester) return res.status(404).json({ error: "User records not found." });
+
+    // Remove from pending list
+    me.requests = me.requests.filter(name => name !== requesterUsername);
+
+    // Mutual Addition
+    if (!me.friends.includes(requesterUsername)) me.friends.push(requesterUsername);
+    if (!requester.friends.includes(myUsername)) requester.friends.push(myUsername);
+
+    await me.save();
+    await requester.save();
+
+    // Signal real-time refresh to requester
+    io.to(requesterUsername).emit('request_accepted', { by: myUsername });
 
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 5. FETCH FRIEND LIST ROUTE
-app.get('/api/friends/:username', async (req, res) => {
+// 5. FETCH FRIEND LIST AND REQUESTS ROUTE
+app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
-    res.json(user ? user.friends : []);
+    res.json({
+      friends: user ? user.friends : [],
+      requests: user ? user.requests : []
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 6. FETCH CHAT HISTORY (Forces history to stay until manual wipe) [1]
+// 6. FETCH CHAT HISTORY
 app.get('/api/messages/:user1/:user2', async (req, res) => {
   try {
     const { user1, user2 } = req.params;
     const history = await Message.find({
-      $or: [
-        { sender: user1, receiver: user2 },
-        { sender: user2, receiver: user1 }
-      ]
+      $or: [{ sender: user1, receiver: user2 }, { sender: user2, receiver: user1 }]
     }).sort({ timestamp: 1 });
     res.json(history);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 7. WIPE CHAT HISTORY ROUTE (Triggered ONLY by manual button) [1]
+// 7. WIPE CHAT HISTORY ROUTE
 app.post('/api/messages/delete', async (req, res) => {
   try {
     const { sender, receiver } = req.body;
