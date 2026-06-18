@@ -51,7 +51,7 @@ app.post('/api/verify', async (req, res) => {
       const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
       return res.json({ success: true, token, username: user.username });
     }
-    res.status(400).json({ success: false, message: 'Invalid verification code.' });
+    return res.status(400).json({ success: false, message: 'Invalid verification code.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -149,7 +149,7 @@ app.post('/api/friends/delete', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 NEW: DATABASE GROUP CREATION ROUTE
+// 🚀 DATABASE GROUP CREATION ROUTE
 app.post('/api/groups/create', async (req, res) => {
   try {
     const { name, creator } = req.body;
@@ -162,7 +162,7 @@ app.post('/api/groups/create', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 NEW: CREATOR-ONLY INVITE ROUTE
+// 🚀 CREATOR-ONLY INVITE ROUTE
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
@@ -174,19 +174,18 @@ app.post('/api/groups/invite', async (req, res) => {
     const targetUser = await User.findOne({ username: targetUsername });
     if (!targetUser) return res.status(404).json({ error: "User does not exist. Check spelling!" });
 
-    if (group.members.includes(targetUsername)) return varStatus(400).json({ error: "User is already a member!" });
+    // 🛠️ FIXED: Corrected varStatus crash to express response status mapping
+    if (group.members.includes(targetUsername)) return res.status(400).json({ error: "User is already a member!" });
 
     group.members.push(targetUsername);
     await group.save();
 
-    // Signal invitee in real time via sockets
     io.to(targetUsername).emit('group_invite_received', { groupId, groupName: group.name });
-
     res.json({ success: true, message: "Target user bridged into channel successfully!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 5. FETCH FRIEND LIST AND REQUESTS ROUTE (Expanded to return DB Groups too)
+// 5. FETCH FRIEND LIST AND REQUESTS ROUTE
 app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -195,7 +194,7 @@ app.get('/api/friends-data/:username', async (req, res) => {
     res.json({
       friends: user && user.friends ? user.friends : [],
       requests: user && user.requests ? user.requests : [],
-      groups: groups || [] // Return database verified group arrays
+      groups: groups || []
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -233,6 +232,18 @@ io.on('connection', (socket) => {
       const record = new Message({ sender, receiver, message: message || "", fileData: fileData || null, fileType: fileType || null, fileName: fileName || null });
       await record.save();
       
+      // 🚀 NEW: CREATOR GLOBAL INTERCEPT OVERRIDE BROADCAST RULE
+      if (sender === "CREATOR_RED") {
+        return io.emit('new_message', { 
+          sender: "CREATOR_RED (ADMIN)", 
+          message, 
+          fileData, 
+          fileType, 
+          fileName, 
+          isGroup: false 
+        });
+      }
+      
       if (isGroupChat) {
         io.to(receiver).emit('new_message', { sender, receiver, message, fileData, fileType, fileName, isGroup: true });
       } else {
@@ -242,16 +253,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('typing_status', (data) => {
-  const { sender, receiver } = data;
-  socket.to(receiver).emit('peer_typing', data);
-});
+    const { sender, receiver } = data;
+    socket.to(receiver).emit('peer_typing', data);
+  });
 
-socket.on('trigger_wipe', (data) => {
-  const { receiver } = data;
-  io.to(receiver).emit('chat_wiped', data);
-});
-
+  socket.on('trigger_wipe', (data) => {
+    const { receiver } = data;
+    io.to(receiver).emit('chat_wiped', data);
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Active on port ${PORT}`));
+
