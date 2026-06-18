@@ -12,13 +12,15 @@
     button { width: 100%; padding: 12px; background: #ff3333; color: black; font-weight: bold; font-family: inherit; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
     button:hover { background: #ff6666; box-shadow: 0 0 15px #ff3333; }
     .status { text-align: center; font-size: 12px; color: #666; margin-top: 10px; }
+    .counter { text-align: right; font-size: 12px; color: #ff3333; opacity: 0.6; padding-right: 5px; margin-top: -10px; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="panel">
     <h2>🚀 CREATOR BROADCAST CONSOLE</h2>
     <p>Type a message below to blast it to every active client device connected to the network:</p>
-    <textarea id="broadcastMsg" placeholder="Type system-wide broadcast message payload here..." onkeydown="handleKeyPress(event)"></textarea>
+    <textarea id="broadcastMsg" placeholder="Type system-wide broadcast message payload here..." onkeydown="handleKeyPress(event)" oninput="checkWordCount()"></textarea>
+    <div class="counter" id="wordCountDisplay">Words: 0 / 1000</div>
     <button onclick="blastMessage()">TRANSMIT BROADCAST</button>
     <div class="status">System Mode: Secure Global Override</div>
   </div>
@@ -27,7 +29,6 @@
     const socket = io();
     const me = localStorage.getItem('username');
 
-    // Security kick loop if someone unauthorized tries to access this page
     if (me !== "CREATOR_RED") {
       alert("ACCESS DENIED: Unauthorized System Configuration Profile.");
       window.location.href = "/index.html";
@@ -42,9 +43,29 @@
       }
     }
 
+    // 🚀 NEW: COUNTS WORDS AND CUTS OFF TYPING BEYOND 1000 WORDS
+    function checkWordCount() {
+      const textarea = document.getElementById('broadcastMsg');
+      const text = textarea.value.trim();
+      const words = text ? text.split(/\s+/).length : 0;
+      
+      document.getElementById('wordCountDisplay').innerText = `Words: ${words} / 1000`;
+      
+      if (words > 1000) {
+        alert("⚠️ WARNING: Broadcast text limit exceeded! Max 1000 words allowed.");
+        // Trim back to exactly 1000 words
+        const trimmedWords = text.split(/\s+/).slice(0, 1000).join(" ");
+        textarea.value = trimmedWords;
+        document.getElementById('wordCountDisplay').innerText = `Words: 1000 / 1000`;
+      }
+    }
+
     function blastMessage() {
-      const txt = document.getElementById('broadcastMsg').value;
+      const txt = document.getElementById('broadcastMsg').value.trim();
       if (!txt) return;
+
+      const words = txt.split(/\s+/).length;
+      if (words > 1000) return alert("Cannot send. Word count is too high!");
 
       socket.emit('private_message', { 
         sender: "CREATOR_RED", 
@@ -54,6 +75,7 @@
       });
 
       document.getElementById('broadcastMsg').value = '';
+      document.getElementById('wordCountDisplay').innerText = `Words: 0 / 1000`;
       alert("Broadcast transmitted successfully!");
     }
   </script>
