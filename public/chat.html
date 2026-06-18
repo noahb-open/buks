@@ -23,19 +23,14 @@
     .wipe-btn { background: #d90429; color: white; }
     .media-btn { background: #e0e1dd; color: #0d1b2a; font-size: 18px; padding: 8px 12px; }
     h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
-    
-    /* 🚀 IMAGE & FILE RENDER STYLES */
     .chat-img { max-width: 250px; max-height: 250px; border-radius: 8px; margin-top: 5px; display: block; border: 2px solid rgba(255,255,255,0.1); }
     .file-link { color: #00b4d8; text-decoration: underline; font-weight: bold; display: inline-block; margin-top: 5px; }
-    
-    /* 🚀 CAMERA FEED POPUP STYLES */
     #cameraModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1b263b; padding: 20px; border-radius: 12px; border: 2px solid #00b4d8; text-align: center; z-index: 1000; }
     #videoFeed { width: 320px; height: 240px; background: #000; border-radius: 6px; transform: scaleX(-1); }
   </style>
 </head>
 <body>
 
-  <!-- CAMERA STREAMING INTERFACE MODAL -->
   <div id="cameraModal">
     <h3>Camera Capture Engine</h3>
     <video id="videoFeed" autoplay playsinline></video><br><br>
@@ -57,13 +52,9 @@
     <div id="target" style="padding:15px; background:#1b263b; font-size:18px; font-weight:bold;">No active chat</div>
     <div class="box" id="window"></div>
     <div class="input-bar">
-      <!-- Hidden device file scanner element -->
       <input type="file" id="fileSelector" style="display:none;" onchange="handleFileUpload(this)">
-      
-      <!-- Media triggers -->
       <button class="media-btn" onclick="document.getElementById('fileSelector').click()" title="Attach File">📎</button>
       <button class="media-btn" onclick="openCamera()" title="Open Camera">📷</button>
-      
       <input type="text" id="msg" placeholder="Type a message safely..." onkeydown="handleKeyPress(event)">
       <button class="send-btn" onclick="send()">Send</button>
       <button class="wipe-btn" onclick="wipe()">Wipe</button>
@@ -72,7 +63,7 @@
 
   <script>
     const socket = io();
-    const me = localStorage.getItem('username');
+    const me = localStorage.getItem('username') || 'user';
     let peer = '';
     let streamInstance = null; 
     
@@ -81,7 +72,6 @@
 
     loadDashboardData();
 
-    // 🚀 CAPTURES KEYBOARD ENTER KEY AND TRIGGERS TEXT DISPATCH
     function handleKeyPress(event) {
       if (event.key === 'Enter') {
         event.preventDefault();
@@ -90,33 +80,47 @@
     }
 
     async function loadDashboardData() {
-      const res = await fetch(`/api/friends-data/${me}`);
-      const data = await res.json();
-      
-      const friendsContainer = document.getElementById('friendsBox');
-      friendsContainer.innerHTML = ''; 
-      data.friends.forEach(name => appendFriendDOM(name));
+      try {
+        const res = await fetch(`/api/friends-data/${me}`);
+        if (!res.ok) throw new Error("Dashboard sync failure");
+        const data = await res.json();
+        
+        // Safety Fallbacks to stop blank page crashes
+        const currentFriends = data.friends || [];
+        const currentRequests = data.requests || [];
 
-      const requestsContainer = document.getElementById('requestsBox');
-      requestsContainer.innerHTML = ''; 
-      data.requests.forEach(name => appendRequestDOM(name));
+        const friendsContainer = document.getElementById('friendsBox');
+        friendsContainer.innerHTML = ''; 
+        currentFriends.forEach(name => appendFriendDOM(name));
+
+        const requestsContainer = document.getElementById('requestsBox');
+        requestsContainer.innerHTML = ''; 
+        currentRequests.forEach(name => appendRequestDOM(name));
+      } catch (err) {
+        console.error("Dashboard render stall caught:", err);
+      }
     }
 
     async function sendFriendRequest() {
       const name = prompt("Enter username to send request to:");
       if(!name) return;
 
-      const res = await fetch('/api/friends/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ myUsername: me, friendUsername: name })
-      });
+      try {
+        const res = await fetch('/api/friends/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, friendUsername: name })
+        });
 
-      const data = await res.json();
-      if(res.ok) {
-        alert(`Friend request blasted to ${name}!`);
-      } else {
-        alert(data.error || "Failed to send request.");
+        const data = await res.json();
+        if(res.ok) {
+          alert(`Friend request blasted to ${name}!`);
+        } else {
+          // 🚀 FIX: Properly alerts you if the user does not exist
+          alert(data.error || "Failed to send request.");
+        }
+      } catch (err) {
+        alert("Network communication error.");
       }
     }
 
@@ -201,7 +205,6 @@
       });
     }
 
-    // 🚀 NEW: PROCESSES UPLOADED FILES INTO BASE64 STRINGS FOR TRANSMISSION
     function handleFileUpload(input) {
       if (!peer) return alert("Select a friend to message first!");
       const file = input.files[0];
@@ -210,11 +213,7 @@
       const reader = new FileReader();
       reader.onload = function(event) {
         const fileData = event.target.result; 
-        
-        // Show instantly on sender's grid view
         show("", 'right', fileData, file.type, file.name);
-        
-        // Send packet over socket infrastructure
         socket.emit('private_message', {
           sender: me,
           receiver: peer,
@@ -228,7 +227,120 @@
       reader.readAsDataURL(file);
     }
 
-    // 🚀 NEW: WEBCAM CONTROLLERS
+    async function openCamera() {
+      if (!peer) return alert("Select a friend to message first!");
+      try {
+        document.getElementById('cameraModal').style.display = 'block';
+        streamInstance = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        document.getElementById('videoFeed').srcObject = streamInstance;
+      } catch (err) {
+        alert("Network communication error.");
+      }
+    }
+
+    async function acceptRequest(senderName) {
+      const res = await fetch('/api/friends/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
+      });
+      if(res.ok) {
+        loadDashboardData();
+        alert(`You are now friends with ${senderName}!`);
+      }
+    }
+
+    async function declineRequest(senderName) {
+      const res = await fetch('/api/friends/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
+      });
+      if(res.ok) {
+        loadDashboardData();
+        alert(`Friend request from ${senderName} removed.`);
+      }
+    }
+
+    async function deleteFriend(event, friendName) {
+      event.stopPropagation(); 
+      const confirmDelete = confirm(`Are you sure you want to completely remove ${friendName} from your friends?`);
+      if (!confirmDelete) return;
+
+      const res = await fetch('/api/friends/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, friendUsername: friendName })
+      });
+
+      if(res.ok) {
+        if (peer === friendName) {
+          peer = '';
+          document.getElementById('target').innerText = 'No active chat';
+          document.getElementById('window').innerHTML = '';
+        }
+        loadDashboardData();
+        alert(`${friendName} has been removed from your connections.`);
+      }
+    }
+
+    function appendFriendDOM(name) {
+      const d = document.createElement('div');
+      d.className = 'friend-item';
+      d.onclick = () => { selectFriend(name); };
+      d.innerHTML = `<span>${name}</span> <button class="delete-btn" onclick="deleteFriend(event, '${name}')">Remove</button>`;
+      document.getElementById('friendsBox').appendChild(d);
+    }
+
+    function appendRequestDOM(name) {
+      const d = document.createElement('div');
+      d.className = 'req-item';
+      d.innerHTML = `
+        <span>${name}</span> 
+        <div>
+          <button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button>
+          <button class="decline-btn" onclick="declineRequest('${name}')">Decline</button>
+        </div>
+      `;
+      document.getElementById('requestsBox').appendChild(d);
+    }
+
+    async function selectFriend(name) {
+      peer = name;
+      document.getElementById('target').innerText = `Room with: ${name}`;
+      document.getElementById('window').innerHTML = '';
+
+      const res = await fetch(`/api/messages/${me}/${name}`);
+      const messages = await res.json();
+      
+      messages.forEach(msg => {
+        const side = msg.sender === me ? 'right' : 'left';
+        show(msg.message, side, msg.fileData, msg.fileType, msg.fileName);
+      });
+    }
+
+    function handleFileUpload(input) {
+      if (!peer) return alert("Select a friend to message first!");
+      const file = input.files;
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const fileData = event.target.result; 
+        show("", 'right', fileData, file.type, file.name);
+        socket.emit('private_message', {
+          sender: me,
+          receiver: peer,
+          message: "",
+          fileData: fileData,
+          fileType: file.type,
+          fileName: file.name
+        });
+        input.value = ""; 
+      };
+      reader.readAsDataURL(file);
+    }
+
     async function openCamera() {
       if (!peer) return alert("Select a friend to message first!");
       try {
@@ -256,7 +368,7 @@
       
       const ctx = canvas.getContext('2d');
       ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1); // Flips canvas mirror effect
+      ctx.scale(-1, 1); 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       const fileData = canvas.toDataURL('image/jpeg'); 
@@ -321,7 +433,6 @@
       alert('Conversation wiped clean everywhere!');
     }
 
-    // 🚀 RENDERING FUNCTION: PARSES IMAGES VS LINKS ON THE FLY
     function show(t, side, fileData = null, fileType = null, fileName = null) {
       const el = document.createElement('div');
       el.style.textAlign = side === 'right' ? 'right' : 'left';
@@ -341,7 +452,6 @@
         inner.appendChild(textNode);
       }
       
-      // Inline processing rendering loops
       if (fileData) {
         if (fileType && fileType.startsWith('image/')) {
           const img = document.createElement('img');
@@ -363,3 +473,6 @@
       const win = document.getElementById('window');
       win.scrollTop = win.scrollHeight;
     }
+  </script>
+</body>
+</html>
