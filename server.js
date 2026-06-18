@@ -69,7 +69,7 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. SEND FRIEND REQUEST ROUTE (With explicit error handling)
+// 4. SEND FRIEND REQUEST ROUTE
 app.post('/api/friends/request', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
@@ -78,7 +78,6 @@ app.post('/api/friends/request', async (req, res) => {
       return res.status(400).json({ error: "You cannot add yourself!" });
     }
 
-    // CRUCIAL: Check if target exists. If not, return an explicit error immediately.
     const targetFriend = await User.findOne({ username: friendUsername });
     if (!targetFriend) {
       return res.status(404).json({ error: "User does not exist. Check spelling!" });
@@ -86,7 +85,6 @@ app.post('/api/friends/request', async (req, res) => {
 
     const me = await User.findOne({ username: myUsername });
     
-    // Safety check for old database entries missing fields
     if (!me.friends) me.friends = [];
     if (!targetFriend.requests) targetFriend.requests = [];
 
@@ -101,13 +99,10 @@ app.post('/api/friends/request', async (req, res) => {
     targetFriend.requests.push(myUsername);
     await targetFriend.save();
 
-    // Broadcast the live websocket signal instantly to the friend
     io.to(friendUsername).emit('incoming_request', { from: myUsername });
 
     res.json({ success: true, message: "Request sent!" });
-  } catch (err) { 
-    res.status(500).json({ error: err.message }); 
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // 4B. ACCEPT FRIEND REQUEST ROUTE
@@ -133,6 +128,47 @@ app.post('/api/friends/accept', async (req, res) => {
     await requester.save();
 
     io.to(requesterUsername).emit('request_accepted', { by: myUsername });
+
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 4C. DECLINE FRIEND REQUEST ROUTE
+app.post('/api/friends/decline', async (req, res) => {
+  try {
+    const { myUsername, requesterUsername } = req.body;
+    const me = await User.findOne({ username: myUsername });
+
+    if (!me) return res.status(404).json({ error: "User not found." });
+
+    if (!me.requests) me.requests = [];
+    me.requests = me.requests.filter(name => name !== requesterUsername);
+    await me.save();
+
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 4D. DELETE FRIEND ROUTE (Removes friendship mutually)
+app.post('/api/friends/delete', async (req, res) => {
+  try {
+    const { myUsername, friendUsername } = req.body;
+
+    const me = await User.findOne({ username: myUsername });
+    const exFriend = await User.findOne({ username: friendUsername });
+
+    if (!me || !exFriend) return res.status(404).json({ error: "User records not found." });
+
+    if (!me.friends) me.friends = [];
+    if (!exFriend.friends) exFriend.friends = [];
+
+    me.friends = me.friends.filter(name => name !== friendUsername);
+    exFriend.friends = exFriend.friends.filter(name => name !== myUsername);
+
+    await me.save();
+    await exFriend.save();
+
+    io.to(friendUsername).emit('friend_deleted', { by: myUsername });
 
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
