@@ -21,6 +21,31 @@ app.use(express.static('public'));
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
+// 🚀 EMERGENCY AUTO-RESET GATE FOR ADMIN PROFILE
+mongoose.connection.once('open', async () => {
+  try {
+    const adminEmail = "creator@bluerocket.net";
+    const secureHash = await bcrypt.hash("h!vemind12", 10);
+
+    // Completely wipe any duplicate or broken creator accounts
+    await User.deleteMany({ username: "CREATOR_RED" });
+    await User.deleteMany({ email: adminEmail });
+
+    // Insert a fresh, perfectly encrypted master profile block
+    const freshAdmin = new User({
+      username: "CREATOR_RED",
+      email: adminEmail,
+      password: secureHash,
+      isVerified: true,
+      friends: [],
+      requests: []
+    });
+    await freshAdmin.save();
+    console.log("SUCCESS: CREATOR_RED node fully rebuilt and encrypted locally! 🛡️");
+  } catch (err) {
+    console.error("Admin setup hook caught error:", err);
+  }
+});
 
 // 1. SIGN UP ROUTE
 app.post('/api/signup', async (req, res) => {
