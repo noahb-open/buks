@@ -71,7 +71,7 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. ADD FRIEND ROUTE (Checks MongoDB to ensure user is real)
+// 4. ADD FRIEND ROUTE (Mutual Addition Setup)
 app.post('/api/friends/add', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
@@ -86,12 +86,21 @@ app.post('/api/friends/add', async (req, res) => {
     }
 
     const me = await User.findOne({ username: myUsername });
+    
+    // Check if you are already friends
     if (me.friends.includes(friendUsername)) {
       return res.status(400).json({ error: "This user is already on your friend list!" });
     }
 
+    // MUTUAL LINK: Add the friend to your list
     me.friends.push(friendUsername);
     await me.save();
+
+    // MUTUAL LINK: Automatically add yourself to their list if not already there
+    if (!targetFriend.friends.includes(myUsername)) {
+      targetFriend.friends.push(myUsername);
+      await targetFriend.save();
+    }
 
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
