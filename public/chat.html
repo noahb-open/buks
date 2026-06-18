@@ -215,7 +215,7 @@
     function removeGroupLocal(event, groupId) {
       event.stopPropagation();
       let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      localGroups = localGroups.filter(g => g !== groupId);
+            localGroups = localGroups.filter(g => g !== groupId);
       localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
       if (peer === groupId) { 
         peer = ''; 
@@ -431,3 +431,4 @@
   </script>
 </body>
 </html>
+
