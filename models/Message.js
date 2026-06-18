@@ -2,11 +2,12 @@ const mongoose = require('mongoose');
 
 const MessageSchema = new mongoose.Schema({
   sender: { type: String, required: true },
-  receiver: { type: String, required: true },
-  message: { type: String, default: "" }, // Keep blank if just sending a picture
-  fileData: { type: String, default: null }, // 🚀 NEW: Holds the Base64 image/file string data
-  fileType: { type: String, default: null }, // 🚀 NEW: e.g., 'image/png', 'application/pdf'
-  fileName: { type: String, default: null }, // 🚀 NEW: original name of uploaded file
+  receiver: { type: String, default: null }, // Null if it's a group message
+  groupId: { type: String, default: null },   // 🚀 NEW: Links to a group chat room
+  message: { type: String, default: "" }, 
+  fileData: { type: String, default: null }, 
+  fileType: { type: String, default: null }, 
+  fileName: { type: String, default: null }, 
   timestamp: { type: Date, default: Date.now }
 });
 
