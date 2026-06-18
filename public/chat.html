@@ -236,4 +236,130 @@
         streamInstance = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         document.getElementById('videoFeed').srcObject = streamInstance;
       } catch (err) {
-alert("Could not access camera. Ensure permissions are allowed.");closeCamera();}}function closeCamera() {document.getElementById('cameraModal').style.display = 'none';if (streamInstance) {streamInstance.getTracks().forEach(track => track.stop());}}function capturePhoto() {const video = document.getElementById('videoFeed');const canvas = document.createElement('canvas');canvas.width = video.videoWidth;canvas.height = video.videoHeight;const ctx = canvas.getContext('2d');ctx.translate(canvas.width, 0);ctx.scale(-1, 1); // Flips canvas mirror effectctx.drawImage(video, 0, 0, canvas.width, canvas.height);const fileData = canvas.toDataURL('image/jpeg');show("", 'right', fileData, 'image/jpeg', 'snapshot.jpg');socket.emit('private_message', {sender: me,receiver: peer,message: "",fileData: fileData,fileType: 'image/jpeg',fileName: 'snapshot.jpg'});closeCamera();}function send() {const txt = document.getElementById('msg').value;if(!txt || !peer) return;show(txt, 'right');socket.emit('private_message', { sender: me, receiver: peer, message: txt });document.getElementById('msg').value = '';}socket.on('new_message', data => {if(data.sender === peer) show(data.message, 'left', data.fileData, data.fileType, data.fileName);});socket.on('incoming_request', () => { loadDashboardData(); });socket.on('request_accepted', () => { loadDashboardData(); });socket.on('friend_deleted', (data) => {if (data.by === peer) {peer = '';document.getElementById('target').innerText = 'No active chat';document.getElementById('window').innerHTML = '';}loadDashboardData();});socket.on('chat_wiped', (data) => {if (data.wipedBy === peer) {document.getElementById('window').innerHTML = '';alert(🔒 Privacy Notice: ${data.wipedBy} has permanently wiped this conversation.);}});async function wipe() {if(!peer) return;const confirmWipe = confirm("Are you sure you want to permanently wipe this conversation for BOTH of you?");if (!confirmWipe) return;await fetch('/api/messages/delete', {method: 'POST',headers: {'Content-Type': 'application/json'},body: JSON.stringify({ sender: me, receiver: peer })});document.getElementById('window').innerHTML = '';socket.emit('trigger_wipe', { sender: me, receiver: peer });alert('Conversation wiped clean everywhere!');}// 🚀 UPDATED RENDERING FUNCTION: PARSES IMAGES VS LINKS ON THE FLYfunction show(t, side, fileData = null, fileType = null, fileName = null) {const el = document.createElement('div');el.style.textAlign = side === 'right' ? 'right' : 'left';el.style.margin = "10px 0";const inner = document.createElement('div');inner.style.background = side === 'right' ? '#0077b6' : '#222';inner.style.padding = "10px";inner.style.borderRadius = "8px";inner.style.maxWidth = "60%";inner.style.display = "inline-block";inner.style.textAlign = "left";if (t) {const textNode = document.createElement('div');textNode.innerText = t;inner.appendChild(textNode);}// Inline processing rendering loopsif (fileData) {if (fileType && fileType.startsWith('image/')) {const img = document.createElement('img');img.src = fileData;img.className = 'chat-img';inner.appendChild(img);} else {const link = document.createElement('a');link.href = fileData;link.download = fileName || "download";link.className = 'file-link';link.innerText = 📄 Download: ${fileName || "Attached File"};inner.appendChild(link);}}el.appendChild(inner);document.getElementById('window').appendChild(el);const win = document.getElementById('window');win.scrollTop = win.scrollHeight;}
+        alert("Could not access camera. Ensure permissions are allowed.");
+        closeCamera();
+      }
+    }
+
+    function closeCamera() {
+      document.getElementById('cameraModal').style.display = 'none';
+      if (streamInstance) {
+        streamInstance.getTracks().forEach(track => track.stop());
+      }
+    }
+
+    function capturePhoto() {
+      const video = document.getElementById('videoFeed');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1); // Flips canvas mirror effect
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const fileData = canvas.toDataURL('image/jpeg'); 
+      
+      show("", 'right', fileData, 'image/jpeg', 'snapshot.jpg');
+      socket.emit('private_message', {
+        sender: me,
+        receiver: peer,
+        message: "",
+        fileData: fileData,
+        fileType: 'image/jpeg',
+        fileName: 'snapshot.jpg'
+      });
+      
+      closeCamera();
+    }
+
+    function send() {
+      const txt = document.getElementById('msg').value;
+      if(!txt || !peer) return;
+      show(txt, 'right');
+      socket.emit('private_message', { sender: me, receiver: peer, message: txt });
+      document.getElementById('msg').value = '';
+    }
+
+    socket.on('new_message', data => { 
+      if(data.sender === peer) show(data.message, 'left', data.fileData, data.fileType, data.fileName); 
+    });
+
+    socket.on('incoming_request', () => { loadDashboardData(); });
+    socket.on('request_accepted', () => { loadDashboardData(); });
+    
+    socket.on('friend_deleted', (data) => {
+      if (data.by === peer) {
+        peer = '';
+        document.getElementById('target').innerText = 'No active chat';
+        document.getElementById('window').innerHTML = '';
+      }
+      loadDashboardData();
+    });
+
+    socket.on('chat_wiped', (data) => {
+      if (data.wipedBy === peer) {
+        document.getElementById('window').innerHTML = '';
+        alert(`🔒 Privacy Notice: ${data.wipedBy} has permanently wiped this conversation.`);
+      }
+    });
+
+    async function wipe() {
+      if(!peer) return;
+      const confirmWipe = confirm("Are you sure you want to permanently wipe this conversation for BOTH of you?");
+      if (!confirmWipe) return;
+
+      await fetch('/api/messages/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ sender: me, receiver: peer })
+      });
+
+      document.getElementById('window').innerHTML = '';
+      socket.emit('trigger_wipe', { sender: me, receiver: peer });
+      alert('Conversation wiped clean everywhere!');
+    }
+
+    // 🚀 RENDERING FUNCTION: PARSES IMAGES VS LINKS ON THE FLY
+    function show(t, side, fileData = null, fileType = null, fileName = null) {
+      const el = document.createElement('div');
+      el.style.textAlign = side === 'right' ? 'right' : 'left';
+      el.style.margin = "10px 0";
+      
+      const inner = document.createElement('div');
+      inner.style.background = side === 'right' ? '#0077b6' : '#222';
+      inner.style.padding = "10px";
+      inner.style.borderRadius = "8px";
+      inner.style.maxWidth = "60%";
+      inner.style.display = "inline-block";
+      inner.style.textAlign = "left";
+      
+      if (t) {
+        const textNode = document.createElement('div');
+        textNode.innerText = t;
+        inner.appendChild(textNode);
+      }
+      
+      // Inline processing rendering loops
+      if (fileData) {
+        if (fileType && fileType.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.src = fileData;
+          img.className = 'chat-img';
+          inner.appendChild(img);
+        } else {
+          const link = document.createElement('a');
+          link.href = fileData;
+          link.download = fileName || "download";
+          link.className = 'file-link';
+          link.innerText = `📄 Download: ${fileName || "Attached File"}`;
+          inner.appendChild(link);
+        }
+      }
+      
+      el.appendChild(inner);
+      document.getElementById('window').appendChild(el);
+      const win = document.getElementById('window');
+      win.scrollTop = win.scrollHeight;
+    }
