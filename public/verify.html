@@ -1,77 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Blue Rocket Dashboard</title>
-  <script src="/socket.io/socket.io.js"></script>
+  <meta charset="UTF-8">
+  <title>Blue Rocket - Access Code</title>
   <style>
-    body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
-    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; }
-    .main { width: 75%; display: flex; flex-direction: column; background: #000814; }
-    .box { flex-grow: 1; padding: 20px; overflow-y: auto; }
-    .input-bar { padding: 15px; display: flex; gap: 10px; background: #1b263b; }
-    input { flex-grow: 1; padding: 10px; border-radius: 5px; }
+    body { background-color: #0d1b2a; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .card { background: #1b263b; padding: 30px; border-radius: 15px; text-align: center; width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    input { width: 90%; padding: 12px; margin: 15px 0; border-radius: 5px; border: none; text-align: center; font-size: 20px; letter-spacing: 5px; background: #e0e1dd; color: #0d1b2a; }
+    button { width: 96%; padding: 12px; border: none; border-radius: 5px; background-color: #38b000; color: white; font-weight: bold; cursor: pointer; font-size: 16px; }
+    .rocket-code { font-size: 24px; font-weight: bold; color: #00b4d8; margin: 10px 0; letter-spacing: 2px; }
   </style>
 </head>
 <body>
-  <div class="side">
-    <h3 id="nameTag">🚀 User</h3>
-    <button onclick="addFriend()" style="width:100%; padding:8px; background:#38b000; color:white; border:none; border-radius:5px;">+ Add Friend</button>
-    <div id="friends" style="margin-top:15px;"></div>
-  </div>
-  <div class="main">
-    <div id="target" style="padding:15px; background:#1b263b;">No active room</div>
-    <div class="box" id="window"></div>
-    <div class="input-bar">
-      <input type="text" id="msg" placeholder="Chat securely...">
-      <button onclick="send()" style="padding:10px 20px; background:#00b4d8; color:white; border:none; border-radius:5px;">Send</button>
-      <button onclick="wipe()" style="padding:10px; background:#d90429; color:white; border:none; border-radius:5px;">Wipe</button>
-    </div>
-  </div>
-  <script>
-    const socket = io();
-    const me = localStorage.getItem('username');
-    let peer = '';
-    document.getElementById('nameTag').innerText = `🚀 ${me}`;
-    socket.emit('join', me);
+  <div class="card">
+    <h2>Launch Verification 🔑</h2>
+    <p>To verify your rocket engine and enter the chat, type the universal access code below:</p>
+    
+    <!-- Universal passcode shown directly to the user -->
+    <div class="rocket-code">🚀 777999 🚀</div>
 
-    function addFriend() {
-      const name = prompt("Friend username:");
-      if(!name) return;
-      const d = document.createElement('div');
-      d.innerText = name;
-      d.style.padding = "10px";
-      d.style.background = "#415a77";
-      d.style.margin = "5px 0";
-      d.style.borderRadius = "5px";
-      d.style.cursor = "pointer";
-      d.onclick = () => { peer = name; document.getElementById('target').innerText = `Room: ${name}`; document.getElementById('window').innerHTML=''; };
-      document.getElementById('friends').appendChild(d);
-    }
-    function send() {
-      const txt = document.getElementById('msg').value;
-      if(!txt || !peer) return;
-      show(txt, 'right');
-      socket.emit('private_message', { sender: me, receiver: peer, message: txt });
-      document.getElementById('msg').value = '';
-    }
-    socket.on('new_message', data => { if(data.sender === peer) show(data.message, 'left'); });
-    function show(t, side) {
-      const el = document.createElement('div');
-      el.innerText = t;
-      el.style.textAlign = side === 'right' ? 'right' : 'left';
-      el.style.margin = "10px 0";
-      document.getElementById('window').appendChild(el);
-    }
-    async function wipe() {
-      if(!peer) return;
-      await fetch('/api/messages/delete', {
+    <form id="verifyForm">
+      <input type="text" id="code" maxlength="6" placeholder="000000" required>
+      <button type="submit">Verify & Launch</button>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('code').value;
+      const email = localStorage.getItem('pendingEmail');
+
+      const res = await fetch('/api/verify', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sender: me, receiver: peer })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code })
       });
-      document.getElementById('window').innerHTML = '';
-      alert('Conversation wiped clear!');
-    }
+
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('username', data.username);
+        window.location.href = '/chat.html';
+      } else {
+        alert(data.message || 'Incorrect Launch Code. Try again!');
+      }
+    });
   </script>
 </body>
 </html>
