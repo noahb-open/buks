@@ -6,24 +6,32 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
-    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; display: flex; flex-direction: column; }
+    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; display: flex; flex-direction: column; overflow-y: auto;}
     .main { width: 75%; display: flex; flex-direction: column; background: #000814; }
     .box { flex-grow: 1; padding: 20px; overflow-y: auto; }
     .input-bar { padding: 15px; display: flex; gap: 10px; background: #1b263b; }
     input { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
     button { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-    .friend-btn { width: 100%; padding: 10px; background: #38b000; color: white; margin-bottom: 15px; }
+    .friend-btn { width: 100%; padding: 10px; background: #0077b6; color: white; margin-bottom: 15px; }
     .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; transition: 0.2s; }
     .friend-item:hover { background: #0077b6; }
+    .req-item { padding: 10px; background: #5c677d; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
+    .accept-btn { background: #38b000; color: white; padding: 4px 8px; font-size: 12px; }
     .send-btn { background: #00b4d8; color: white; }
     .wipe-btn { background: #d90429; color: white; }
+    h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
   </style>
 </head>
 <body>
   <div class="side">
     <h3 id="nameTag">🚀 User</h3>
-    <button class="friend-btn" onclick="addFriend()">+ Add Friend</button>
-    <div id="friends"></div>
+    <button class="friend-btn" onclick="sendFriendRequest()">+ Add Friend</button>
+    
+    <h4>Pending Requests 📩</h4>
+    <div id="requestsBox"></div>
+
+    <h4>My Friends 🚀</h4>
+    <div id="friendsBox"></div>
   </div>
   <div class="main">
     <div id="target" style="padding:15px; background:#1b263b; font-size:18px; font-weight:bold;">No active chat</div>
@@ -43,32 +51,52 @@
     document.getElementById('nameTag').innerText = `🚀 ${me}`;
     socket.emit('join', me);
 
-    loadFriendsList();
+    // Initial Database Synchronization Call
+    loadDashboardData();
 
-    async function loadFriendsList() {
-      const res = await fetch(`/api/friends/${me}`);
-      const friends = await res.json();
-      const container = document.getElementById('friends');
-      container.innerHTML = ''; 
-      friends.forEach(name => appendFriendDOM(name));
+    async function loadDashboardData() {
+      const res = await fetch(`/api/friends-data/${me}`);
+      const data = await res.json();
+      
+      // 1. Render Friends
+      const friendsContainer = document.getElementById('friendsBox');
+      friendsContainer.innerHTML = ''; 
+      data.friends.forEach(name => appendFriendDOM(name));
+
+      // 2. Render Incoming Pending Requests
+      const requestsContainer = document.getElementById('requestsBox');
+      requestsContainer.innerHTML = ''; 
+      data.requests.forEach(name => appendRequestDOM(name));
     }
 
-    async function addFriend() {
-      const name = prompt("Enter friend's exact username:");
+    async function sendFriendRequest() {
+      const name = prompt("Enter username to send request to:");
       if(!name) return;
 
-      const res = await fetch('/api/friends/add', {
+      const res = await fetch('/api/friends/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ myUsername: me, friendUsername: name })
       });
 
+      const data = await res.json();
       if(res.ok) {
-        appendFriendDOM(name);
-        alert(`${name} added successfully!`);
+        alert(`Friend request blasted to ${name}!`);
       } else {
-        const data = await res.json();
-        alert(data.error || "Could not add friend.");
+        alert(data.error || "Failed to send request.");
+      }
+    }
+
+    async function acceptRequest(senderName) {
+      const res = await fetch('/api/friends/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
+      });
+
+      if(res.ok) {
+        loadDashboardData(); // Re-sync components locally
+        alert(`You are now friends with ${senderName}!`);
       }
     }
 
@@ -77,10 +105,16 @@
       d.className = 'friend-item';
       d.innerText = name;
       d.onclick = () => { selectFriend(name); };
-      document.getElementById('friends').appendChild(d);
+      document.getElementById('friendsBox').appendChild(d);
     }
 
-    // 🚀 NEW: Loads permanent chat history from MongoDB when clicking a friend [1]
+    function appendRequestDOM(name) {
+      const d = document.createElement('div');
+      d.className = 'req-item';
+      d.innerHTML = `<span>${name}</span> <button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button>`;
+      document.getElementById('requestsBox').appendChild(d);
+    }
+
     async function selectFriend(name) {
       peer = name;
       document.getElementById('target').innerText = `Room with: ${name}`;
@@ -107,7 +141,10 @@
       if(data.sender === peer) show(data.message, 'left'); 
     });
 
-    // 🚀 LISTEN FOR MUTUAL PANIC WIPE SIGNAL [1]
+    // 🚀 NEW INTERFACE REALTIME CHANNEL LISTENERS
+    socket.on('incoming_request', () => { loadDashboardData(); });
+    socket.on('request_accepted', () => { loadDashboardData(); });
+    
     socket.on('chat_wiped', (data) => {
       if (data.wipedBy === peer) {
         document.getElementById('window').innerHTML = '';
@@ -115,10 +152,8 @@
       }
     });
 
-    // 🚀 MANUAL PANIC WIPE (Only disappears when clicked) [1]
     async function wipe() {
       if(!peer) return;
-      
       const confirmWipe = confirm("Are you sure you want to permanently wipe this conversation for BOTH of you?");
       if (!confirmWipe) return;
 
