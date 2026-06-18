@@ -1,8 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Blue Rocket - Dashboard</title>
+  <title>Blue Rocket Dashboard</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
@@ -13,18 +12,12 @@
     input { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
     button { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
     .friend-btn { width: 100%; padding: 10px; background: #0077b6; color: white; margin-bottom: 15px; }
-    
-    /* Layout styling blocks */
-    .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+    .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
     .friend-item:hover { background: #0077b6; }
     .req-item { padding: 10px; background: #5c677d; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
-    
-    /* Action Buttons styling */
     .accept-btn { background: #38b000; color: white; padding: 4px 8px; font-size: 12px; margin-right: 5px; border-radius: 3px; }
     .decline-btn { background: #e63946; color: white; padding: 4px 8px; font-size: 12px; border-radius: 3px; }
-    .delete-btn { background: #d90429; color: white; padding: 4px 8px; font-size: 11px; border-radius: 3px; opacity: 0.7; transition: 0.2s; }
-    .delete-btn:hover { opacity: 1; }
-    
+    .delete-btn { background: #d90429; color: white; padding: 4px 8px; font-size: 11px; border-radius: 3px; }
     .send-btn { background: #00b4d8; color: white; }
     .wipe-btn { background: #d90429; color: white; }
     h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
@@ -45,7 +38,8 @@
     <div id="target" style="padding:15px; background:#1b263b; font-size:18px; font-weight:bold;">No active chat</div>
     <div class="box" id="window"></div>
     <div class="input-bar">
-      <input type="text" id="msg" placeholder="Type a message safely...">
+      <!-- 🚀 ADDED: onkeydown="handleKeyPress(event)" listens for key presses directly on the input field -->
+      <input type="text" id="msg" placeholder="Type a message safely..." onkeydown="handleKeyPress(event)">
       <button class="send-btn" onclick="send()">Send</button>
       <button class="wipe-btn" onclick="wipe()">Wipe</button>
     </div>
@@ -60,6 +54,14 @@
     socket.emit('join', me);
 
     loadDashboardData();
+
+    // 🚀 NEW: CHECKS IF THE PRESSED KEY IS ENTER, THEN CALLS THE SEND FUNCTION
+    function handleKeyPress(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault(); // Prevents adding a line break inside the input box
+        send();
+      }
+    }
 
     async function loadDashboardData() {
       const res = await fetch(`/api/friends-data/${me}`);
@@ -104,7 +106,6 @@
       }
     }
 
-    // 🚀 NEW: DECLINE INCOMING FRIEND REQUEST ENGINE
     async function declineRequest(senderName) {
       const res = await fetch('/api/friends/decline', {
         method: 'POST',
@@ -117,9 +118,8 @@
       }
     }
 
-    // 🚀 NEW: MUTUAL FRIEND DELETE SYSTEM
     async function deleteFriend(event, friendName) {
-      event.stopPropagation(); // Prevents clicking the delete button from opening the chat window
+      event.stopPropagation(); 
       const confirmDelete = confirm(`Are you sure you want to completely remove ${friendName} from your friends?`);
       if (!confirmDelete) return;
 
@@ -130,7 +130,6 @@
       });
 
       if(res.ok) {
-        // If we are currently chatting with the person we deleted, close the chat window
         if (peer === friendName) {
           peer = '';
           document.getElementById('target').innerText = 'No active chat';
@@ -145,8 +144,6 @@
       const d = document.createElement('div');
       d.className = 'friend-item';
       d.onclick = () => { selectFriend(name); };
-      
-      // Inject friend name text and a floating red delete button
       d.innerHTML = `<span>${name}</span> <button class="delete-btn" onclick="deleteFriend(event, '${name}')">Remove</button>`;
       document.getElementById('friendsBox').appendChild(d);
     }
@@ -193,7 +190,6 @@
     socket.on('incoming_request', () => { loadDashboardData(); });
     socket.on('request_accepted', () => { loadDashboardData(); });
     
-    // 🚀 NEW: Listens for real-time removal flags from ex-friends
     socket.on('friend_deleted', (data) => {
       if (data.by === peer) {
         peer = '';
