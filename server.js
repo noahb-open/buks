@@ -5,7 +5,6 @@ const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 
 const User = require('./models/User');
 const Message = require('./models/Message');
@@ -15,18 +14,13 @@ const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
 app.use(express.json());
-app.use(express.static('public')); // This looks for your files in /public!
+app.use(express.static('public')); 
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-});
-
-// SIGN UP ROUTE (No Emails, No Alerts, Pure Redirect)
+// 1. SIGN UP ROUTE (No Emails, Pure Redirect with Static Code)
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -35,7 +29,7 @@ app.post('/api/signup', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Save the user with a permanent universal verification token string
+    // Save user with the permanent universal verification passcode
     const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999" });
     await newUser.save();
 
@@ -43,13 +37,12 @@ app.post('/api/signup', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// EMAIL CODE VERIFICATION
+// 2. CODE VERIFICATION ROUTE
 app.post('/api/verify', async (req, res) => {
   try {
     const { email, code } = req.body;
     const user = await User.findOne({ email });
 
-    // Validate against the fixed keycode
     if (user && (user.verificationCode === code || code === "777999")) {
       user.isVerified = true;
       user.verificationCode = null; 
@@ -58,42 +51,75 @@ app.post('/api/verify', async (req, res) => {
       const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
       return res.json({ success: true, token, username: user.username });
     }
-    res.status(400).json({ success: false, message: 'Invalid or expired verification code.' });
+    res.status(400).json({ success: false, message: 'Invalid verification code.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2B. NATIVE ACCOUNT LOGIN ROUTE
+// 3. ACCOUNT LOGIN ROUTE
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
     
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
-    if (!user.isVerified) return res.status(401).json({ success: false, message: 'Verify account token first.' });
+    if (!user.isVerified) return res.status(401).json({ success: false, message: 'Please verify your account first.' });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) return res.status(400).json({ success: false, message: 'Wrong credentials.' });
 
-    // Login verified
     res.json({ success: true, username: user.username });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// 4. ADD FRIEND ROUTE (Checks MongoDB to ensure user is real)
+app.post('/api/friends/add', async (req, res) => {
+  try {
+    const { myUsername, friendUsername } = req.body;
 
-// WIPE CHAT ROUTE (Snapchat-style)
+    if (myUsername === friendUsername) {
+      return res.status(400).json({ error: "You cannot add yourself as a friend!" });
+    }
+
+    const targetFriend = await User.findOne({ username: friendUsername });
+    if (!targetFriend) {
+      return res.status(404).json({ error: "User not found. Check exact spelling!" });
+    }
+
+    const me = await User.findOne({ username: myUsername });
+    if (me.friends.includes(friendUsername)) {
+      return res.status(400).json({ error: "This user is already on your friend list!" });
+    }
+
+    me.friends.push(friendUsername);
+    await me.save();
+
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 5. FETCH FRIEND LIST ROUTE
+app.get('/api/friends/:username', async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username });
+    res.json(user ? user.friends : []);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 6. WIPE CHAT HISTORY ROUTE (Snapchat Style)
 app.post('/api/messages/delete', async (req, res) => {
-  const { sender, receiver } = req.body;
-  await Message.deleteMany({
-    $or: [{ sender, receiver }, { sender: receiver, receiver: sender }]
-  });
-  res.json({ success: true });
+  try {
+    const { sender, receiver } = req.body;
+    await Message.deleteMany({
+      $or: [{ sender, receiver }, { sender: receiver, receiver: sender }]
+    });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// LIVE SOCKET CHANNEL
+// REAL-TIME WEBSOCKET CHAT MECHANISM
 io.on('connection', (socket) => {
   socket.on('join', (username) => socket.join(username));
+  
   socket.on('private_message', async (data) => {
     const { sender, receiver, message } = data;
     const record = new Message({ sender, receiver, message });
