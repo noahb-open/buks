@@ -1,52 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Blue Rocket Dashboard</title>
+  <meta charset="UTF-8">
+  <title>Blue Rocket - Dashboard</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
-    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; }
+    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; display: flex; flex-direction: column; }
     .main { width: 75%; display: flex; flex-direction: column; background: #000814; }
     .box { flex-grow: 1; padding: 20px; overflow-y: auto; }
     .input-bar { padding: 15px; display: flex; gap: 10px; background: #1b263b; }
-    input { flex-grow: 1; padding: 10px; border-radius: 5px; }
+    input { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
+    button { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    .friend-btn { width: 100%; padding: 10px; background: #38b000; color: white; margin-bottom: 15px; }
+    .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+    .friend-item:hover { background: #0077b6; }
+    .send-btn { background: #00b4d8; color: white; }
+    .wipe-btn { background: #d90429; color: white; }
   </style>
 </head>
 <body>
   <div class="side">
     <h3 id="nameTag">🚀 User</h3>
-    <button onclick="addFriend()" style="width:100%; padding:8px; background:#38b000; color:white; border:none; border-radius:5px;">+ Add Friend</button>
-    <div id="friends" style="margin-top:15px;"></div>
+    <button class="friend-btn" onclick="addFriend()">+ Add Friend</button>
+    <div id="friends"></div>
   </div>
   <div class="main">
-    <div id="target" style="padding:15px; background:#1b263b;">No active room</div>
+    <div id="target" style="padding:15px; background:#1b263b; font-size:18px; font-weight:bold;">No active chat</div>
     <div class="box" id="window"></div>
     <div class="input-bar">
-      <input type="text" id="msg" placeholder="Chat securely...">
-      <button onclick="send()" style="padding:10px 20px; background:#00b4d8; color:white; border:none; border-radius:5px;">Send</button>
-      <button onclick="wipe()" style="padding:10px; background:#d90429; color:white; border:none; border-radius:5px;">Wipe</button>
+      <input type="text" id="msg" placeholder="Type a message safely...">
+      <button class="send-btn" onclick="send()">Send</button>
+      <button class="wipe-btn" onclick="wipe()">Wipe</button>
     </div>
   </div>
+
   <script>
     const socket = io();
     const me = localStorage.getItem('username');
     let peer = '';
+    
     document.getElementById('nameTag').innerText = `🚀 ${me}`;
     socket.emit('join', me);
 
-    function addFriend() {
-      const name = prompt("Friend username:");
+    // Grab database records on startup
+    loadFriendsList();
+
+    async function loadFriendsList() {
+      const res = await fetch(`/api/friends/${me}`);
+      const friends = await res.json();
+      const container = document.getElementById('friends');
+      container.innerHTML = ''; 
+      
+      friends.forEach(name => appendFriendDOM(name));
+    }
+
+    async function addFriend() {
+      const name = prompt("Enter friend's exact username:");
       if(!name) return;
+
+      const res = await fetch('/api/friends/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, friendUsername: name })
+      });
+
+      if(res.ok) {
+        appendFriendDOM(name);
+        alert(`${name} added successfully!`);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Could not add friend.");
+      }
+    }
+
+    function appendFriendDOM(name) {
       const d = document.createElement('div');
+      d.className = 'friend-item';
       d.innerText = name;
-      d.style.padding = "10px";
-      d.style.background = "#415a77";
-      d.style.margin = "5px 0";
-      d.style.borderRadius = "5px";
-      d.style.cursor = "pointer";
-      d.onclick = () => { peer = name; document.getElementById('target').innerText = `Room: ${name}`; document.getElementById('window').innerHTML=''; };
+      d.onclick = () => { 
+        peer = name; 
+        document.getElementById('target').innerText = `Room with: ${name}`; 
+        document.getElementById('window').innerHTML = ''; 
+      };
       document.getElementById('friends').appendChild(d);
     }
+
     function send() {
       const txt = document.getElementById('msg').value;
       if(!txt || !peer) return;
@@ -54,14 +93,26 @@
       socket.emit('private_message', { sender: me, receiver: peer, message: txt });
       document.getElementById('msg').value = '';
     }
-    socket.on('new_message', data => { if(data.sender === peer) show(data.message, 'left'); });
+
+    socket.on('new_message', data => { 
+      if(data.sender === peer) show(data.message, 'left'); 
+    });
+
     function show(t, side) {
       const el = document.createElement('div');
       el.innerText = t;
       el.style.textAlign = side === 'right' ? 'right' : 'left';
       el.style.margin = "10px 0";
+      el.style.background = side === 'right' ? '#0077b6' : '#222';
+      el.style.padding = "10px";
+      el.style.borderRadius = "8px";
+      el.style.maxWidth = "60%";
+      el.style.marginLeft = side === 'right' ? 'auto' : '0';
       document.getElementById('window').appendChild(el);
+      const win = document.getElementById('window');
+      win.scrollTop = win.scrollHeight;
     }
+
     async function wipe() {
       if(!peer) return;
       await fetch('/api/messages/delete', {
@@ -70,7 +121,7 @@
         body: JSON.stringify({ sender: me, receiver: peer })
       });
       document.getElementById('window').innerHTML = '';
-      alert('Conversation wiped clear!');
+      alert('Conversation wiped clear from database!');
     }
   </script>
 </body>
