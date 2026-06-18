@@ -131,13 +131,13 @@
     }
 
     function createGroupChat() {
-      const gName = prompt("Enter a unique name for your new Group Chat:");
+      const gName = prompt("Put the name of the group you want to make/join:");
       if (!gName) return;
       
       const cleanGid = 'group_' + gName.toLowerCase().replace(/[^a-z0-9]/g, '_');
       
       const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      if (localGroups.includes(cleanGid)) return alert("Group name taken!");
+      if (localGroups.includes(cleanGid)) return alert("You are already in this group room!");
       
       localGroups.push(cleanGid);
       localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
@@ -211,6 +211,10 @@
       document.getElementById('friendsBox').appendChild(d);
       socket.emit('join', groupId);
     }
+
+    function removeGroupLocal(event, groupId) {
+      event.stopPropagation();
+      let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
 localGroups = localGroups.filter(g => g !== groupId);
 localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
 if (peer === groupId) { 
@@ -218,9 +222,7 @@ if (peer === groupId) {
   document.getElementById('target').innerText = 'No active chat'; 
   document.getElementById('window').innerHTML = ''; 
 }
-      loadDashboardData();
-    }
-
+loadDashboardData();
     function appendRequestDOM(name) {
       const d = document.createElement('div');
       d.className = 'req-item';
@@ -420,7 +422,3 @@ if (peer === groupId) {
   </script>
 </body>
 </html>
-
-    function removeGroupLocal(event, groupId) {
-      event.stopPropagation();
-      let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
