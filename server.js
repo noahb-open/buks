@@ -213,7 +213,7 @@ app.post('/api/messages/delete', async (req, res) => {
 io.on('connection', (socket) => {
   socket.on('join', (username) => socket.join(username));
   
-  // Updated pipeline to relay and save file/image streams along with standard texts
+  // Pipeline to relay and save file/image streams along with standard texts
   socket.on('private_message', async (data) => {
     const { sender, receiver, message, fileData, fileType, fileName } = data;
     
