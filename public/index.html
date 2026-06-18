@@ -42,6 +42,7 @@
   <script>
     let isLoginView = false;
 
+    // Smoothly switches interface views between Log In and Sign Up modes
     function toggleView() {
       isLoginView = !isLoginView;
       const signupForm = document.getElementById('signupForm');
@@ -77,16 +78,15 @@
           body: JSON.stringify({ username, email, password })
         });
 
-        const data = await res.json();
         if (res.ok) {
-          // Bypasses email setup by displaying token to user via immediate popup alert
-          alert(`🚀 Verification Required!\nYour 6-digit debugging access code is: ${data.debugCode}`);
+          // Instantly changes page to verification window view
           window.location.href = '/verify.html';
         } else {
+          const data = await res.json();
           alert(data.error || 'Registration failed');
         }
       } catch (err) {
-        alert('Cannot connect to your Railway server. Check database variables.');
+        alert('Connection error. Verify your Railway environment properties.');
       }
     });
 
