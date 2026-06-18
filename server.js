@@ -64,6 +64,26 @@ app.post('/api/verify', async (req, res) => {
   res.status(400).json({ success: false, message: 'Invalid Code' });
 });
 
+// 2B. NATIVE ACCOUNT LOGIN ROUTE
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (!user.isVerified) return res.status(401).json({ success: false, message: 'Verify account token first.' });
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) return res.status(400).json({ success: false, message: 'Wrong credentials.' });
+
+    // Login verified
+    res.json({ success: true, username: user.username });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // WIPE CHAT ROUTE (Snapchat-style)
 app.post('/api/messages/delete', async (req, res) => {
   const { sender, receiver } = req.body;
