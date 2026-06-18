@@ -6,8 +6,8 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
   verificationCode: { type: String },
-  friends: { type: [String], default: [] },  // 🚀 Tracks accepted connections
-  requests: { type: [String], default: [] }  // 🚀 Tracks pending handshakes
+  friends: { type: [String], default: [] },  
+  requests: { type: [String], default: [] }  
 });
 
 module.exports = mongoose.model('User', UserSchema);
