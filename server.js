@@ -151,7 +151,7 @@ app.post('/api/friends/decline', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4D. DELETE FRIEND ROUTE (Removes friendship mutually)
+// 4D. DELETE FRIEND ROUTE
 app.post('/api/friends/delete', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
@@ -187,13 +187,23 @@ app.get('/api/friends-data/:username', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 6. FETCH CHAT HISTORY (Loads message text, image strings, and files)
+// 6. FETCH CHAT HISTORY (Dynamic filter handles both Private & Group streams)
 app.get('/api/messages/:user1/:user2', async (req, res) => {
   try {
     const { user1, user2 } = req.params;
-    const history = await Message.find({
-      $or: [{ sender: user1, receiver: user2 }, { sender: user2, receiver: user1 }]
-    }).sort({ timestamp: 1 });
+    
+    let query;
+    if (user2.startsWith('group_')) {
+      // If it's a group, pull all messages belonging to that room destination ID
+      query = { receiver: user2 };
+    } else {
+      // Standard private 1v1 direct message routing
+      query = {
+        $or: [{ sender: user1, receiver: user2 }, { sender: user2, receiver: user1 }]
+      };
+    }
+
+    const history = await Message.find(query).sort({ timestamp: 1 });
     res.json(history);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -202,20 +212,28 @@ app.get('/api/messages/:user1/:user2', async (req, res) => {
 app.post('/api/messages/delete', async (req, res) => {
   try {
     const { sender, receiver } = req.body;
-    await Message.deleteMany({
-      $or: [{ sender, receiver }, { sender: receiver, receiver: sender }]
-    });
+    
+    if (receiver.startsWith('group_')) {
+      await Message.deleteMany({ receiver: receiver });
+    } else {
+      await Message.deleteMany({
+        $or: [{ sender, receiver }, { sender: receiver, receiver: sender }]
+      });
+    }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// REAL-TIME WEBSOCKET PIPELINE
+// REAL-TIME WEBSOCKET PIPELINE (With Group Rooms, Typing indicators, and Group purges)
 io.on('connection', (socket) => {
-  socket.on('join', (username) => socket.join(username));
   
-  // Pipeline to relay and save file/image streams along with standard texts
+  socket.on('join', (roomName) => {
+    socket.join(roomName);
+    console.log(`Node connected to channel: ${roomName}`);
+  });
+  
   socket.on('private_message', async (data) => {
-    const { sender, receiver, message, fileData, fileType, fileName } = data;
+    const { sender, receiver, message, fileData, fileType, fileName, isGroupChat } = data;
     
     try {
       const record = new Message({ 
@@ -228,21 +246,31 @@ io.on('connection', (socket) => {
       });
       await record.save();
       
-      io.to(receiver).emit('new_message', { 
-        sender, 
-        message,
-        fileData,
-        fileType,
-        fileName
-      });
+      if (isGroupChat) {
+        // Broadcast packet to everyone sitting in the room container
+        io.to(receiver).emit('new_message', { sender, receiver, message, fileData, fileType, fileName, isGroup: true });
+      } else {
+        // Direct private transmission routing
+        io.to(receiver).emit('new_message', { sender, message, fileData, fileType, fileName, isGroup: false });
+      }
     } catch (err) {
       console.error("Failed to process message attachment:", err);
     }
   });
 
+  // 🚀 NEW: RE-TRANSMITS LIVE TYPING FLAGS TO ROOM MEMBERS
+  socket.on('typing_status', (data) => {
+    const { sender, receiver, isTyping } = data;
+    socket.to(receiver).emit('peer_typing', { sender, isTyping });
+  });
+
   socket.on('trigger_wipe', (data) => {
-    const { sender, receiver } = data;
-    io.to(receiver).emit('chat_wiped', { wipedBy: sender });
+    const { sender, receiver, isGroupChat } = data;
+    if (isGroupChat) {
+      io.to(receiver).emit('chat_wiped', { wipedBy: sender, isGroup: true });
+    } else {
+      io.to(receiver).emit('chat_wiped', { wipedBy: sender, isGroup: false });
+    }
   });
 });
 
