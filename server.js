@@ -28,7 +28,7 @@ app.post('/api/signup', async (req, res) => {
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999" });
+    const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999", friends: [], requests: [] });
     await newUser.save();
 
     res.status(201).json({ message: 'User created successfully!' });
@@ -69,7 +69,7 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. SEND FRIEND REQUEST ROUTE (Instead of immediate direct add)
+// 4. SEND FRIEND REQUEST ROUTE (With explicit error handling)
 app.post('/api/friends/request', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
@@ -78,13 +78,18 @@ app.post('/api/friends/request', async (req, res) => {
       return res.status(400).json({ error: "You cannot add yourself!" });
     }
 
+    // CRUCIAL: Check if target exists. If not, return an explicit error immediately.
     const targetFriend = await User.findOne({ username: friendUsername });
     if (!targetFriend) {
-      return res.status(404).json({ error: "User not found. Check exact spelling!" });
+      return res.status(404).json({ error: "User does not exist. Check spelling!" });
     }
 
     const me = await User.findOne({ username: myUsername });
     
+    // Safety check for old database entries missing fields
+    if (!me.friends) me.friends = [];
+    if (!targetFriend.requests) targetFriend.requests = [];
+
     if (me.friends.includes(friendUsername)) {
       return res.status(400).json({ error: "This user is already on your friend list!" });
     }
@@ -93,15 +98,16 @@ app.post('/api/friends/request', async (req, res) => {
       return res.status(400).json({ error: "Friend request already pending!" });
     }
 
-    // Push into their pending incoming requests folder array
     targetFriend.requests.push(myUsername);
     await targetFriend.save();
 
-    // Notify target in real time if they are online via websockets
+    // Broadcast the live websocket signal instantly to the friend
     io.to(friendUsername).emit('incoming_request', { from: myUsername });
 
     res.json({ success: true, message: "Request sent!" });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { 
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // 4B. ACCEPT FRIEND REQUEST ROUTE
@@ -114,17 +120,18 @@ app.post('/api/friends/accept', async (req, res) => {
 
     if (!me || !requester) return res.status(404).json({ error: "User records not found." });
 
-    // Remove from pending list
+    if (!me.requests) me.requests = [];
+    if (!me.friends) me.friends = [];
+    if (!requester.friends) requester.friends = [];
+
     me.requests = me.requests.filter(name => name !== requesterUsername);
 
-    // Mutual Addition
     if (!me.friends.includes(requesterUsername)) me.friends.push(requesterUsername);
     if (!requester.friends.includes(myUsername)) requester.friends.push(myUsername);
 
     await me.save();
     await requester.save();
 
-    // Signal real-time refresh to requester
     io.to(requesterUsername).emit('request_accepted', { by: myUsername });
 
     res.json({ success: true });
@@ -136,8 +143,8 @@ app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
     res.json({
-      friends: user ? user.friends : [],
-      requests: user ? user.requests : []
+      friends: user && user.friends ? user.friends : [],
+      requests: user && user.requests ? user.requests : []
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
