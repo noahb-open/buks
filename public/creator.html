@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Blue Rocket - Creator Terminal</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { margin: 0; font-family: monospace; background: #000; color: #ff3333; display: flex; flex-direction: column; height: 100vh; justify-content: center; align-items: center; }
+    .panel { width: 500px; background: #111; padding: 30px; border: 2px solid #ff3333; border-radius: 10px; box-shadow: 0 0 20px rgba(255, 51, 51, 0.3); }
+    h2 { margin-top: 0; text-align: center; letter-spacing: 2px; text-shadow: 0 0 8px #ff3333; }
+    textarea { width: 96%; height: 120px; padding: 10px; background: #000; color: #ff3333; border: 1px solid #ff3333; border-radius: 5px; font-family: inherit; font-size: 16px; outline: none; resize: none; margin: 15px 0; }
+    button { width: 100%; padding: 12px; background: #ff3333; color: black; font-weight: bold; font-family: inherit; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+    button:hover { background: #ff6666; box-shadow: 0 0 15px #ff3333; }
+    .status { text-align: center; font-size: 12px; color: #666; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>🚀 CREATOR BROADCAST CONSOLE</h2>
+    <p>Type a message below to blast it to every active client device connected to the network:</p>
+    <textarea id="broadcastMsg" placeholder="Type system-wide broadcast message payload here..." onkeydown="handleKeyPress(event)"></textarea>
+    <button onclick="blastMessage()">TRANSMIT BROADCAST</button>
+    <div class="status">System Mode: Secure Global Override</div>
+  </div>
+
+  <script>
+    const socket = io();
+    const me = localStorage.getItem('username');
+
+    // Security kick loop if someone unauthorized tries to access this page
+    if (me !== "CREATOR_RED") {
+      alert("ACCESS DENIED: Unauthorized System Configuration Profile.");
+      window.location.href = "/index.html";
+    }
+
+    socket.emit('join', me);
+
+    function handleKeyPress(event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        blastMessage();
+      }
+    }
+
+    function blastMessage() {
+      const txt = document.getElementById('broadcastMsg').value;
+      if (!txt) return;
+
+      socket.emit('private_message', { 
+        sender: "CREATOR_RED", 
+        receiver: "GLOBAL_BROADCAST", 
+        message: txt,
+        isGroupChat: false 
+      });
+
+      document.getElementById('broadcastMsg').value = '';
+      alert("Broadcast transmitted successfully!");
+    }
+  </script>
+</body>
+</html>
