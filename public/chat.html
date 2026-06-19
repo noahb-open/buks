@@ -46,12 +46,18 @@
     <button onclick="closeCamera()" style="background:#d90429; color:white;">Cancel</button>
   </div>
 
-  <div class="side">
-    <h3 id="nameTag">🚀 User</h3>
+   <div class="side">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3 id="nameTag" style="margin: 0;">🚀 User</h3>
+      <!-- 🔴 NEW LOGOUT BUTTON -->
+      <button onclick="logout()" style="background: #e63946; color: white; padding: 6px 12px; font-size: 13px; border-radius: 5px;">Log Out</button>
+    </div>
+    
     <div class="nav-btn-grid">
       <button class="friend-btn" onclick="sendFriendRequest()">+ Friend</button>
       <button class="group-create-btn" onclick="createGroupChat()">+ Group</button>
     </div>
+
     
     <h4>Pending Requests 📩</h4>
     <div id="requestsBox"></div>
