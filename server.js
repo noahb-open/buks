@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 
 const User = require('./models/User');
 const Message = require('./models/Message');
-const Group = require('./models/Group'); // 🚀 NEW: Import group schema
+const Group = require('./models/Group'); // 🚀 Import group schema
 
 const app = express();
 const server = http.createServer(app);
@@ -93,7 +93,10 @@ app.post('/api/login', async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) return res.status(400).json({ success: false, message: 'Wrong credentials.' });
 
-    res.json({ success: true, username: user.username });
+    // ✨ Fix: Generate JWT token on successful login
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({ success: true, token, username: user.username });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -179,6 +182,8 @@ app.post('/api/friends/delete', async (req, res) => {
 app.post('/api/groups/create', async (req, res) => {
   try {
     const { name, creator } = req.body;
+    if (!name || !creator) return res.status(400).json({ error: "Missing name or creator fields." });
+
     const groupId = 'group_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString().slice(-4);
     
     const newGroup = new Group({ name, groupId, creator, members: [creator] });
@@ -188,17 +193,17 @@ app.post('/api/groups/create', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 CREATOR-ONLY INVITE ROUTE (Completed)
+// 🚀 CREATOR-ONLY INVITE ROUTE
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
     const group = await Group.findOne({ groupId });
     
     if (!group) return res.status(404).json({ error: "Group not found." });
-    if (group.creator !== creatorUsername) return res.status(403).json({ error: "🔒 Access Denied: Only the group creator can invite members!" });
+    if (group.creator !== creatorUsername) return res.status(403).json({ error: "🔒 Access Denied: Only the creator can invite!" });
 
     const targetUser = await User.findOne({ username: targetUsername });
-    if (!targetUser) return res.status(404).json({ error: "User does not exist. Check spelling!" });
+    if (!targetUser) return res.status(404).json({ error: "User does not exist." });
 
     if (group.members.includes(targetUsername)) return res.status(400).json({ error: "User is already a member!" });
 
@@ -208,7 +213,7 @@ app.post('/api/groups/invite', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 📊 DASHBOARD DATA SYNC ENDPOINT (Required by frontend part 2)
+// 📊 DASHBOARD DATA SYNC ENDPOINT
 app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -217,17 +222,15 @@ app.get('/api/friends-data/:username', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 📂 CHAT HISTORY RETRIEVAL ENDPOINT (Required by frontend part 3)
+// 📂 CHAT HISTORY RETRIEVAL ENDPOINT
 app.get('/api/messages/:me/:peer', async (req, res) => {
   try {
     const { me, peer } = req.params;
     let messages;
     
     if (peer.startsWith('group_')) {
-      // Fetch structural group logs
       messages = await Message.find({ receiver: peer }).sort({ createdAt: 1 });
     } else {
-      // Fetch private binary records
       messages = await Message.find({
         $or: [
           { sender: me, receiver: peer },
@@ -239,7 +242,7 @@ app.get('/api/messages/:me/:peer', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🧹 WIPING ENGINE DATA OVERWRITE (Required by frontend part 3)
+// 🧹 WIPING ENGINE DATA OVERWRITE
 app.post('/api/messages/delete', async (req, res) => {
   try {
     const { sender, receiver } = req.body;
@@ -258,42 +261,32 @@ app.post('/api/messages/delete', async (req, res) => {
 });
 
 // 🛰️ REALTIME SOCKET.IO ENGINE MANAGEMENT
-const socketUsers = {};
-
 io.on('connection', (socket) => {
 
   socket.on('join', (roomOrUser) => {
     socket.join(roomOrUser);
-    if (!roomOrUser.startsWith('group_')) {
-      socketUsers[roomOrUser] = socket.id;
-    }
     console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
   });
 
-  // 🛰️ ORIGINAL BACKGROUND SYNC PIPELINE (Successfully Restored!)
   socket.on('request_dashboard_sync', async (username) => {
     try {
       const user = await User.findOne({ username: username });
       if (user) {
-        // Build the active friends channel objects list
         const formatChannels = (user.friends || []).map(fName => ({ name: fName, isGroup: false }));
-        
-        // Emit your true, database-verified records back to the front-end view
         socket.emit('dashboard_sync', {
-          username: user.username, // 🟢 This pulls "bukanan" live from MongoDB!
+          username: user.username,
           channels: formatChannels,
           requests: user.requests || []
         });
       }
     } catch (err) {
-      console.error("Dashboard database sync execution warning:", err);
+      console.error("Dashboard database sync warning:", err);
     }
   });
 
-  // 🚀 REALTIME MESSAGE PIPELINE WITH MULTIMEDIA PIPELINING
+  // 🚀 REALTIME MESSAGE PIPELINE
   socket.on('private_message', async (data) => {
     try {
-      // 🔥 SYSTEM OVERRIDE: Catch global blasts before database validation occurs
       if (data.receiver === "GLOBAL_BROADCAST" && data.sender.startsWith("CREATOR_RED")) {
         io.emit('new_message', {
           sender: "CREATOR_RED (ADMIN)",
@@ -303,10 +296,9 @@ io.on('connection', (socket) => {
           fileType: null,
           fileName: null
         });
-        return; // Prevents the code from executing further and hitting MongoDB crashes!
+        return;
       }
 
-      // Standard Private & Group message processing continues safely below
       const newMessage = new Message({
         sender: data.sender,
         receiver: data.receiver,
@@ -321,51 +313,27 @@ io.on('connection', (socket) => {
       if (data.isGroupChat) {
         io.to(data.receiver).emit('new_message', newMessage);
       } else {
-        const targetSocketId = socketUsers[data.receiver];
-        if (targetSocketId) {
-          io.to(targetSocketId).emit('new_message', newMessage);
-        }
+        io.to(data.receiver).emit('new_message', newMessage);
+        io.to(data.sender).emit('new_message', newMessage); 
       }
     } catch (err) {
-      console.error("Message database storage drop:", err);
+      console.error("Message save error:", err);
     }
   });
 
-  // ✍️ REALTIME STATE MANAGEMENT INTERCEPTOR (TYPING STATUS)
   socket.on('typing_status', (data) => {
-    if (data.isGroupChat) {
-      socket.to(data.receiver).emit('peer_typing', { sender: data.sender, isTyping: data.isTyping });
-    } else {
-      const targetSocketId = socketUsers[data.receiver];
-      if (targetSocketId) {
-        io.to(targetSocketId).emit('peer_typing', { sender: data.sender, isTyping: data.isTyping });
-      }
-    }
+    socket.to(data.receiver).emit('peer_typing', { sender: data.sender, isTyping: data.isTyping });
   });
 
-  // 🧹 SYSTEM TRIGGERED RECURSIVE DESTRUCTION EVENT
   socket.on('trigger_wipe', (data) => {
-    if (data.isGroupChat) {
-      io.to(data.receiver).emit('chat_wiped', { isGroup: true, receiver: data.receiver, wipedBy: data.sender });
-    } else {
-      const targetSocketId = socketUsers[data.receiver];
-      if (targetSocketId) {
-        io.to(targetSocketId).emit('chat_wiped', { isGroup: false, receiver: data.receiver, wipedBy: data.sender });
-      }
-    }
+    io.to(data.receiver).emit('chat_wiped', { isGroup: data.isGroupChat, receiver: data.receiver, wipedBy: data.sender });
   });
 
-  // 🔌 DECOUPLING CLEANUP DISCONNECT HOOK
   socket.on('disconnect', () => {
-    Object.keys(socketUsers).forEach(user => {
-      if (socketUsers[user] === socket.id) {
-        delete socketUsers[user];
-        console.log(`Session terminated for username node: ${user}`);
-      }
-    });
+    console.log(`Socket disconnected: ${socket.id}`);
   });
 });
 
-// 🚀 SERVER PORT INITIALIZATION
+// 🌐 ENGINE START-UP CONTROL
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Blue Rocket Server running smoothly on port ${PORT} 🚀`));
