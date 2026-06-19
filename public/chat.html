@@ -371,6 +371,42 @@
         }
       }
     });
+        // 🛰️ ORIGINAL AUTOMATED DASHBOARD SYNCHRONIZATION EVENT
+    socket.on('dashboard_sync', (data) => {
+      // Updates your side panel profile header dynamically with your real MongoDB username
+      if (data.username) {
+        document.getElementById('nameTag').innerText = `🚀 ${data.username}`;
+      }
+      
+      // Cleans and populates your active friend list channels layout
+      const friendsBox = document.getElementById('friendsBox');
+      friendsBox.innerHTML = '';
+      
+      data.channels.forEach(ch => {
+        const div = document.createElement('div');
+        div.className = 'friend-item';
+        div.innerText = `${ch.isGroup ? '👥' : '👤'} ${ch.name}`;
+        div.onclick = () => selectTargetChannel(ch.name, ch.isGroup); // Linked to your custom click channel function
+        friendsBox.appendChild(div);
+      });
+
+      // Cleans and builds your pending requests dashboard structure
+      const requestsBox = document.getElementById('requestsBox');
+      requestsBox.innerHTML = '';
+      data.requests.forEach(req => {
+        const div = document.createElement('div');
+        div.className = 'req-item';
+        div.innerHTML = `
+          <span>${req}</span>
+          <div>
+            <button class="accept-btn" onclick="acceptRequest('${req}')">✓</button>
+            <button class="decline-btn" onclick="declineRequest('${req}')">✗</button>
+          </div>
+        `;
+        requestsBox.appendChild(div);
+      });
+    });
+
 
     socket.on('incoming_request', () => { loadDashboardData(); });
     socket.on('request_accepted', () => { loadDashboardData(); });
