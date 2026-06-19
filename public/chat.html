@@ -485,7 +485,7 @@
       if (data.username) {
         document.getElementById('nameTag').innerText = `🚀 ${data.username}`;
       }
-            const friendsBox = document.getElementById('friendsBox');
+            let friendsBox = document.getElementById('friendsBox');
       friendsBox.innerHTML = '';
       
       // 1. Reconstruct persistent Group layout tabs with Invite buttons
@@ -535,7 +535,7 @@
       });
 
       
-      const friendsBox = document.getElementById('friendsBox');
+      let friendsBox = document.getElementById('friendsBox');
       friendsBox.innerHTML = '';
       
       data.channels.forEach(ch => {
