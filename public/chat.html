@@ -296,7 +296,6 @@
       const reader = new FileReader();
       reader.onload = function(event) {
         const fileData = event.target.result; 
-        if (!isGroup) show("", 'right', fileData, file.type, file.name, me);
         socket.emit('private_message', {
           sender: me,
           receiver: peer,
@@ -339,14 +338,13 @@
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const fileData = canvas.toDataURL('image/jpeg'); 
       
-      if (!isGroup) show("", 'right', fileData, 'image/jpeg', 'snapshot.jpg', me);
       socket.emit('private_message', {
         sender: me,
         receiver: peer,
         message: "",
         fileData: fileData,
         fileType: 'image/jpeg',
-        fileName: 'snapshot.jpg',
+        fileName: `snapshot_${Date.now()}.jpg`,
         isGroupChat: isGroup
       });
       closeCamera();
@@ -355,7 +353,6 @@
     function send() {
       const txt = document.getElementById('msg').value.trim();
       if (!txt || !peer) return;
-      if (!isGroup) show(txt, 'right', null, null, null, me);
       socket.emit('private_message', { sender: me, receiver: peer, message: txt, isGroupChat: isGroup });
       document.getElementById('msg').value = '';
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
@@ -456,15 +453,7 @@
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
       } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
-        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
-      } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
-        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender); 
-      }
-    });
-
-    socket.on('peer_typing', data => {
-      if (data.sender === peer || (isGroup && peer.startsWith('group_'))) {
-        const element = document.getElementById('typingIndicator');
+        show(data.message, data.sender === me ? 'right' : '        const element = document.getElementById('typingIndicator');
         if (data.isTyping) {
           element.innerText = data.sender + " is typing...";
           element.style.display = 'block';
@@ -483,7 +472,7 @@
       let syncFriendsBox = document.getElementById('friendsBox');
       if (syncFriendsBox) syncFriendsBox.innerHTML = '';
       
-      // 1. Reconstruct persistent Group layout tabs with Invite buttons
+      // 1. Reconstruct Group tabs
       const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
       localGroups.forEach(groupId => {
         const d = document.createElement('div');
@@ -503,7 +492,7 @@
         if (syncFriendsBox) syncFriendsBox.appendChild(d);
       });
 
-      // 2. Re-append standard direct message friends
+      // 2. Re-append Direct friends
       data.channels.forEach(ch => {
         const div = document.createElement('div');
         div.className = `friend-item ${peer === ch.name && !isGroup ? 'active' : ''}`;
@@ -513,7 +502,7 @@
         if (syncFriendsBox) syncFriendsBox.appendChild(div);
       });
 
-      // 3. Clean and build pending requests dashboard structure
+      // 3. Re-append Request containers
       const requestsBox = document.getElementById('requestsBox');
       if (requestsBox) {
         requestsBox.innerHTML = '';
@@ -544,3 +533,8 @@
   </script>
 </body>
 </html>
+
+    });
+
+    socket.on('peer_typing', data => {
+      if (data.sender === peer || (isGroup && peer.startsWith('group_'))) {
