@@ -269,8 +269,28 @@ io.on('connection', (socket) => {
     }
     console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
   });
+
+  // 🛰️ ORIGINAL BACKGROUND SYNC PIPELINE (Successfully Restored!)
+  socket.on('request_dashboard_sync', async (username) => {
+    try {
+      const user = await User.findOne({ username: username });
+      if (user) {
+        // Build the active friends channel objects list
+        const formatChannels = (user.friends || []).map(fName => ({ name: fName, isGroup: false }));
+        
+        // Emit your true, database-verified records back to the front-end view
+        socket.emit('dashboard_sync', {
+          username: user.username, // 🟢 This pulls "bukanan" live from MongoDB!
+          channels: formatChannels,
+          requests: user.requests || []
+        });
+      }
+    } catch (err) {
+      console.error("Dashboard database sync execution warning:", err);
+    }
+  });
+
   // 🚀 REALTIME MESSAGE PIPELINE WITH MULTIMEDIA PIPELINING
-   // 🚀 REALTIME MESSAGE PIPELINE WITH MULTIMEDIA PIPELINING
   socket.on('private_message', async (data) => {
     try {
       // 🔥 SYSTEM OVERRIDE: Catch global blasts before database validation occurs
@@ -310,7 +330,6 @@ io.on('connection', (socket) => {
       console.error("Message database storage drop:", err);
     }
   });
-
 
   // ✍️ REALTIME STATE MANAGEMENT INTERCEPTOR (TYPING STATUS)
   socket.on('typing_status', (data) => {
