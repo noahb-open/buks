@@ -21,6 +21,7 @@ app.use(express.static('public'));
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
+
 // 🚀 EMERGENCY AUTO-RESET GATE FOR ADMIN PROFILE
 mongoose.connection.once('open', async () => {
   try {
@@ -187,7 +188,7 @@ app.post('/api/groups/create', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 CREATOR-ONLY INVITE ROUTE
+// 🚀 CREATOR-ONLY INVITE ROUTE (Completed)
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
@@ -199,95 +200,139 @@ app.post('/api/groups/invite', async (req, res) => {
     const targetUser = await User.findOne({ username: targetUsername });
     if (!targetUser) return res.status(404).json({ error: "User does not exist. Check spelling!" });
 
-    // 🛠️ FIXED: Corrected varStatus crash to express response status mapping
     if (group.members.includes(targetUsername)) return res.status(400).json({ error: "User is already a member!" });
 
     group.members.push(targetUsername);
     await group.save();
-
-    io.to(targetUsername).emit('group_invite_received', { groupId, groupName: group.name });
-    res.json({ success: true, message: "Target user bridged into channel successfully!" });
+    res.json({ success: true, message: "Member added successfully!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 5. FETCH FRIEND LIST AND REQUESTS ROUTE
+// 📊 DASHBOARD DATA SYNC ENDPOINT (Required by frontend part 2)
 app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
-    const groups = await Group.find({ members: req.params.username });
-    
-    res.json({
-      friends: user && user.friends ? user.friends : [],
-      requests: user && user.requests ? user.requests : [],
-      groups: groups || []
-    });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json({ friends: user.friends || [], requests: user.requests || [] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 6. FETCH CHAT HISTORY
-app.get('/api/messages/:user1/:user2', async (req, res) => {
+// 📂 CHAT HISTORY RETRIEVAL ENDPOINT (Required by frontend part 3)
+app.get('/api/messages/:me/:peer', async (req, res) => {
   try {
-    const { user1, user2 } = req.params;
-    let query = user2.startsWith('group_') ? { receiver: user2 } : { $or: [{ sender: user1, receiver: user2 }, { sender: user2, receiver: user1 }] };
-    const history = await Message.find(query).sort({ timestamp: 1 });
-    res.json(history);
+    const { me, peer } = req.params;
+    let messages;
+    
+    if (peer.startsWith('group_')) {
+      // Fetch structural group logs
+      messages = await Message.find({ receiver: peer }).sort({ createdAt: 1 });
+    } else {
+      // Fetch private binary records
+      messages = await Message.find({
+        $or: [
+          { sender: me, receiver: peer },
+          { sender: peer, receiver: me }
+        ]
+      }).sort({ createdAt: 1 });
+    }
+    res.json(messages);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 7. WIPE CHAT HISTORY ROUTE
+// 🧹 WIPING ENGINE DATA OVERWRITE (Required by frontend part 3)
 app.post('/api/messages/delete', async (req, res) => {
   try {
     const { sender, receiver } = req.body;
     if (receiver.startsWith('group_')) {
-      await Message.deleteMany({ receiver: receiver });
+      await Message.deleteMany({ receiver });
     } else {
-      await Message.deleteMany({ $or: [{ sender, receiver }, { sender: receiver, receiver: sender }] });
+      await Message.deleteMany({
+        $or: [
+          { sender, receiver },
+          { sender: receiver, receiver: sender }
+        ]
+      });
     }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// REAL-TIME WEBSOCKET PIPELINE
+// 🛰️ REALTIME SOCKET.IO ENGINE MANAGEMENT
+const socketUsers = {};
+
 io.on('connection', (socket) => {
-  socket.on('join', (roomName) => socket.join(roomName));
-  
+
+  socket.on('join', (roomOrUser) => {
+    socket.join(roomOrUser);
+    if (!roomOrUser.startsWith('group_')) {
+      socketUsers[roomOrUser] = socket.id;
+    }
+    console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
+  });
+  // 🚀 REALTIME MESSAGE PIPELINE WITH MULTIMEDIA PIPELINING
   socket.on('private_message', async (data) => {
-    const { sender, receiver, message, fileData, fileType, fileName, isGroupChat } = data;
     try {
-      const record = new Message({ sender, receiver, message: message || "", fileData: fileData || null, fileType: fileType || null, fileName: fileName || null });
-      await record.save();
-      
-      // 🚀 NEW: CREATOR GLOBAL INTERCEPT OVERRIDE BROADCAST RULE
-      if (sender === "CREATOR_RED") {
-        return io.emit('new_message', { 
-          sender: "CREATOR_RED (ADMIN)", 
-          message, 
-          fileData, 
-          fileType, 
-          fileName, 
-          isGroup: false 
-        });
-      }
-      
-      if (isGroupChat) {
-        io.to(receiver).emit('new_message', { sender, receiver, message, fileData, fileType, fileName, isGroup: true });
+      const newMessage = new Message({
+        sender: data.sender,
+        receiver: data.receiver,
+        message: data.message || "",
+        fileData: data.fileData || null,
+        fileType: data.fileType || null,
+        fileName: data.fileName || null,
+        isGroupChat: data.isGroupChat || false
+      });
+      await newMessage.save();
+
+      if (data.isGroupChat) {
+        // Broadcast straight to the shared room channel
+        io.to(data.receiver).emit('new_message', newMessage);
       } else {
-        io.to(receiver).emit('new_message', { sender, message, fileData, fileType, fileName, isGroup: false });
+        // Precise private target delivery execution 
+        const targetSocketId = socketUsers[data.receiver];
+        if (targetSocketId) {
+          io.to(targetSocketId).emit('new_message', newMessage);
+        }
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error("Message database storage drop:", err);
+    }
   });
 
+  // ✍️ REALTIME STATE MANAGEMENT INTERCEPTOR (TYPING STATUS)
   socket.on('typing_status', (data) => {
-    const { sender, receiver } = data;
-    socket.to(receiver).emit('peer_typing', data);
+    if (data.isGroupChat) {
+      socket.to(data.receiver).emit('peer_typing', { sender: data.sender, isTyping: data.isTyping });
+    } else {
+      const targetSocketId = socketUsers[data.receiver];
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('peer_typing', { sender: data.sender, isTyping: data.isTyping });
+      }
+    }
   });
 
+  // 🧹 SYSTEM TRIGGERED RECURSIVE DESTRUCTION EVENT
   socket.on('trigger_wipe', (data) => {
-    const { receiver } = data;
-    io.to(receiver).emit('chat_wiped', data);
+    if (data.isGroupChat) {
+      io.to(data.receiver).emit('chat_wiped', { isGroup: true, receiver: data.receiver, wipedBy: data.sender });
+    } else {
+      const targetSocketId = socketUsers[data.receiver];
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('chat_wiped', { isGroup: false, receiver: data.receiver, wipedBy: data.sender });
+      }
+    }
+  });
+
+  // 🔌 DECOUPLING CLEANUP DISCONNECT HOOK
+  socket.on('disconnect', () => {
+    Object.keys(socketUsers).forEach(user => {
+      if (socketUsers[user] === socket.id) {
+        delete socketUsers[user];
+        console.log(`Session terminated for username node: ${user}`);
+      }
+    });
   });
 });
 
+// 🚀 SERVER PORT INITIALIZATION
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Active on port ${PORT}`));
-
+server.listen(PORT, () => console.log(`Blue Rocket Server running smoothly on port ${PORT} 🚀`));
