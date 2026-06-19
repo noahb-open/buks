@@ -29,9 +29,10 @@
     const socket = io();
     const me = localStorage.getItem('username');
 
+    // Frontend sanity check (Note: Move this file behind an authenticated path for true security)
     if (me !== "CREATOR_RED") {
       alert("ACCESS DENIED: Unauthorized System Configuration Profile.");
-      window.location.href = "/index.html";
+      window.location.href = "/login.html";
     }
 
     socket.emit('join', me);
@@ -43,7 +44,6 @@
       }
     }
 
-    // 🚀 NEW: COUNTS WORDS AND CUTS OFF TYPING BEYOND 1000 WORDS
     function checkWordCount() {
       const textarea = document.getElementById('broadcastMsg');
       const text = textarea.value.trim();
@@ -53,7 +53,6 @@
       
       if (words > 1000) {
         alert("⚠️ WARNING: Broadcast text limit exceeded! Max 1000 words allowed.");
-        // Trim back to exactly 1000 words
         const trimmedWords = text.split(/\s+/).slice(0, 1000).join(" ");
         textarea.value = trimmedWords;
         document.getElementById('wordCountDisplay').innerText = `Words: 1000 / 1000`;
@@ -67,8 +66,9 @@
       const words = txt.split(/\s+/).length;
       if (words > 1000) return alert("Cannot send. Word count is too high!");
 
+      // 🛠️ FIXED PAYLOAD: Setting receiver to "CREATOR_RED (ADMIN)" triggers your chat.html interceptor pipeline
       socket.emit('private_message', { 
-        sender: "CREATOR_RED", 
+        sender: "CREATOR_RED (ADMIN)", 
         receiver: "GLOBAL_BROADCAST", 
         message: txt,
         isGroupChat: false 
