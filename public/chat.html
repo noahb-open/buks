@@ -85,28 +85,22 @@
   </div>
 
   <script>
-    const socket = io();
+       const socket = io();
     
-    // 🚀 DYNAMIC ROUTE GUARD: Pulls whoever is logged in
-    const me = localStorage.getItem('username');
-    
-    // If NO ONE is logged in, do not say "User"—kick them back to the gateway!
-    if (!me || me === 'user') {
-      alert("Terminal Session Unauthenticated. Redirecting to access gateway...");
-      window.location.href = 'https://railway.app';
-    }
-
+    // 🚀 THE ORIGINAL DYNAMIC METHOD
+    // Reads whoever is actively logged in via session cookie or current token parameters
+    const me = localStorage.getItem('username') || 'user';
     let peer = '';
     let isGroup = false;
     let streamInstance = null;
     let typingTimeout;
     
-    document.getElementById('nameTag').innerText = `🚀 ${me}`;
+    // Join the socket server immediately using your active handle
     socket.emit('join', me);
 
-
-
+    // Run the automatic data sync function to pull your true profile live
     loadDashboardData();
+
 
     function handleKeyPress(event) {
       if (event.key === 'Enter') {
