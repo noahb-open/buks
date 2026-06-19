@@ -280,6 +280,86 @@
       win.appendChild(div);
       win.scrollTop = win.scrollHeight;
     }
+        async function createGroupChat() {
+      const gName = prompt("Enter new Group Chat name:");
+      if (!gName) return;
+      try {
+        const res = await fetch('/api/groups/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: gName, creator: me })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
+          localGroups.push(data.group.groupId);
+          localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
+          loadDashboardData();
+        } else { 
+          alert(data.error || "Group creation failed."); 
+        }
+      } catch(err) { console.error("Group creation engine failed:", err); }
+    }
+
+    async function sendFriendRequest() {
+      const name = prompt("Enter username to send request to:");
+      if (!name) return;
+      try {
+        const res = await fetch('/api/friends/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, friendUsername: name })
+        });
+        const data = await res.json();
+        if (res.ok) alert(`Friend request blasted to ${name}!`);
+        else alert(data.error || "Failed to send request.");
+      } catch(err) { console.error("Friend link system failed:", err); }
+    }
+
+    async function acceptRequest(target) {
+      try {
+        const res = await fetch('/api/friends/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, requesterUsername: target })
+        });
+        if (res.ok) loadDashboardData();
+      } catch(err) { console.error(err); }
+    }
+
+    async function declineRequest(target) {
+      try {
+        const res = await fetch('/api/friends/decline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, requesterUsername: target })
+        });
+        if (res.ok) loadDashboardData();
+      } catch(err) { console.error(err); }
+    }
+
+    async function deleteFriend(target) {
+      if (!confirm(`Remove ${target} from friend networks?`)) return;
+      try {
+        const res = await fetch('/api/friends/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, friendUsername: target })
+        });
+        if (res.ok) {
+          if (peer === target) { 
+            peer = ''; 
+            document.getElementById('target').innerText = 'No active chat'; 
+            document.getElementById('window').innerHTML = ''; 
+          }
+          loadDashboardData();
+        }
+      } catch(err) { console.error(err); }
+    }
+
+
+
+    
 
     function handleFileUpload(input) {
       if (!peer) return alert("Select a chat channel first!");
