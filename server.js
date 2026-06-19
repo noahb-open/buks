@@ -270,8 +270,23 @@ io.on('connection', (socket) => {
     console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
   });
   // 🚀 REALTIME MESSAGE PIPELINE WITH MULTIMEDIA PIPELINING
+   // 🚀 REALTIME MESSAGE PIPELINE WITH MULTIMEDIA PIPELINING
   socket.on('private_message', async (data) => {
     try {
+      // 🔥 SYSTEM OVERRIDE: Catch global blasts before database validation occurs
+      if (data.receiver === "GLOBAL_BROADCAST" && data.sender.startsWith("CREATOR_RED")) {
+        io.emit('new_message', {
+          sender: "CREATOR_RED (ADMIN)",
+          receiver: "GLOBAL_BROADCAST",
+          message: data.message,
+          fileData: null,
+          fileType: null,
+          fileName: null
+        });
+        return; // Prevents the code from executing further and hitting MongoDB crashes!
+      }
+
+      // Standard Private & Group message processing continues safely below
       const newMessage = new Message({
         sender: data.sender,
         receiver: data.receiver,
@@ -284,10 +299,8 @@ io.on('connection', (socket) => {
       await newMessage.save();
 
       if (data.isGroupChat) {
-        // Broadcast straight to the shared room channel
         io.to(data.receiver).emit('new_message', newMessage);
       } else {
-        // Precise private target delivery execution 
         const targetSocketId = socketUsers[data.receiver];
         if (targetSocketId) {
           io.to(targetSocketId).emit('new_message', newMessage);
@@ -297,6 +310,7 @@ io.on('connection', (socket) => {
       console.error("Message database storage drop:", err);
     }
   });
+
 
   // ✍️ REALTIME STATE MANAGEMENT INTERCEPTOR (TYPING STATUS)
   socket.on('typing_status', (data) => {
