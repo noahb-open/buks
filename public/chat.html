@@ -29,7 +29,7 @@
     .media-btn { background: #e0e1dd; color: #0d1b2a; font-size: 18px; padding: 8px 12px; }
     h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
     
-    .msg-wrapper { max-width: 70%; padding: 10px; border-radius: 8px; line-break: anywhere; }
+    .msg-wrapper { max-width: 70%; padding: 10px; border-radius: 8px; line-break: anywhere; margin: 5px 0; }
     .msg-me { background: #00b4d8; align-self: flex-end; color: black; }
     .msg-peer { background: #415a77; align-self: flex-start; color: white; }
     .msg-meta { font-size: 11px; opacity: 0.7; margin-bottom: 3px; font-weight: bold; }
@@ -120,8 +120,8 @@
         if (!res.ok) throw new Error("Dashboard sync failure");
         const data = await res.json();
         
-        const friendsContainer = document.getElementById('friendsBox');
-        friendsContainer.innerHTML = ''; 
+        let onLoadFriendsBox = document.getElementById('friendsBox');
+        if (onLoadFriendsBox) onLoadFriendsBox.innerHTML = ''; 
         
         // Render stored groups
         const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
@@ -132,8 +132,10 @@
 
         // Render Request box
         const requestsContainer = document.getElementById('requestsBox');
-        requestsContainer.innerHTML = ''; 
-        (data.requests || []).forEach(name => appendRequestDOM(name));
+        if (requestsContainer) {
+          requestsContainer.innerHTML = ''; 
+          (data.requests || []).forEach(name => appendRequestDOM(name));
+        }
       } catch (err) {
         console.error("Dashboard render stall caught:", err);
       }
@@ -159,7 +161,7 @@
         deleteFriend(name);
       };
       div.appendChild(delBtn);
-      box.appendChild(div);
+      if (box) box.appendChild(div);
     }
 
     function appendGroupDOM(groupId) {
@@ -168,11 +170,17 @@
       d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
       d.setAttribute('data-id', groupId);
       d.style.borderLeft = "4px solid #6a0dad";
-      d.onclick = () => { selectTargetChannel(groupId, true); };
       
       const displayLabel = groupId.replace('group_', '').toUpperCase();
-      d.innerHTML = `<span>👥 ${displayLabel}</span> <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>`;
-      box.appendChild(d);
+      d.innerHTML = `
+        <span>👥 ${displayLabel}</span> 
+        <div>
+          <button class="accept-btn" style="background:#6a0dad; color:white; padding:4px 8px; font-size:12px; border-radius:3px; margin-right:5px;" onclick="inviteToGroup(event, '${groupId}')">Invite</button>
+          <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>
+        </div>
+      `;
+      d.onclick = () => { selectTargetChannel(groupId, true); };
+      if (box) box.appendChild(d);
       socket.emit('join', groupId);
     }
 
@@ -188,7 +196,8 @@
       }
       loadDashboardData();
     }
-        async function inviteToGroup(event, groupId) {
+
+    async function inviteToGroup(event, groupId) {
       event.stopPropagation(); 
       const targetUser = prompt("Enter username to invite to this group chat:");
       if (!targetUser) return;
@@ -204,7 +213,6 @@
       } catch(err) { console.error("Group invitation pipe issue:", err); }
     }
 
-
     function appendRequestDOM(name) {
       const d = document.createElement('div');
       d.className = 'req-item';
@@ -218,46 +226,31 @@
       document.getElementById('typingIndicator').style.display = 'none';
       document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: @${name}`;
       document.getElementById('window').innerHTML = '';
-          // 🚀 REST OF THE SCRIPT ENGINE
-      const res = await fetch(`/api/messages/${me}/${name}`);
-      const messages = await res.json();
-      
-      messages.forEach(msg => {
-        const side = msg.sender === me ? 'right' : 'left';
-        show(msg.message, side, msg.fileData, msg.fileType, msg.fileName, msg.sender);
-      });
+
+      document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
+      const activeEl = document.querySelector(`.friend-item[data-id="${name}"]`);
+      if (activeEl) activeEl.classList.add('active');
+
+      try {
+        const res = await fetch(`/api/messages/${me}/${name}`);
+        if (res.ok) {
+          const messages = await res.json();
+          messages.forEach(msg => {
+            const side = msg.sender === me ? 'right' : 'left';
+            show(msg.message, side, msg.fileData, msg.fileType, msg.fileName, msg.sender);
+          });
+        }
+      } catch (err) { console.error(err); }
     }
 
-
-
-
-        function show(messageText, side, fileData, fileType, fileName, senderName) {
+    function show(messageText, side, fileData, fileType, fileName, senderName) {
       const win = document.getElementById('window');
       const div = document.createElement('div');
       
-      div.className = 'msg-wrapper';
-      div.style.maxWidth = '70%';
-      div.style.padding = '10px';
-      div.style.borderRadius = '8px';
-      div.style.margin = '5px 0';
-      div.style.lineBreak = 'anywhere';
-      
-      if (side === 'right') {
-        div.style.background = '#00b4d8';
-        div.style.alignSelf = 'flex-end';
-        div.style.color = 'black';
-      } else {
-        div.style.background = '#415a77';
-        div.style.alignSelf = 'flex-start';
-        div.style.color = 'white';
-      }
+      div.className = `msg-wrapper ${side === 'right' ? 'msg-me' : 'msg-peer'}`;
       
       const meta = document.createElement('div');
       meta.className = 'msg-meta';
-      meta.style.fontSize = '11px';
-      meta.style.opacity = '0.7';
-      meta.style.marginBottom = '3px';
-      meta.style.fontWeight = 'bold';
       meta.innerText = senderName || '';
       div.appendChild(meta);
 
@@ -271,111 +264,29 @@
         if (fileType && fileType.startsWith('image/')) {
           const img = document.createElement('img');
           img.src = fileData;
-          img.style.maxWidth = '250px';
-          img.style.maxHeight = '250px';
-          img.style.borderRadius = '8px';
+          img.className = 'chat-img';
           div.appendChild(img);
         } else if (fileType && fileType.startsWith('video/')) {
           const vid = document.createElement('video');
           vid.src = fileData;
-          vid.style.maxWidth = '250px';
-          vid.style.maxHeight = '250px';
-          vid.style.borderRadius = '8px';
+          vid.className = 'chat-video';
           vid.controls = true;
           div.appendChild(vid);
         } else {
           const link = document.createElement('a');
           link.href = fileData;
           link.download = fileName || 'attachment';
-          link.style.color = '#00b4d8';
+          link.className = 'file-link';
           link.innerText = `📁 Download ${fileName || 'Attachment'}`;
           div.appendChild(link);
         }
       }
 
-      win.appendChild(div);
-      win.scrollTop = win.scrollHeight;
+      if (win) {
+        win.appendChild(div);
+        win.scrollTop = win.scrollHeight;
+      }
     }
-        async function createGroupChat() {
-      const gName = prompt("Enter new Group Chat name:");
-      if (!gName) return;
-      try {
-        const res = await fetch('/api/groups/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: gName, creator: me })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-          localGroups.push(data.group.groupId);
-          localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-          loadDashboardData();
-        } else { 
-          alert(data.error || "Group creation failed."); 
-        }
-      } catch(err) { console.error("Group creation engine failed:", err); }
-    }
-
-    async function sendFriendRequest() {
-      const name = prompt("Enter username to send request to:");
-      if (!name) return;
-      try {
-        const res = await fetch('/api/friends/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, friendUsername: name })
-        });
-        const data = await res.json();
-        if (res.ok) alert(`Friend request blasted to ${name}!`);
-        else alert(data.error || "Failed to send request.");
-      } catch(err) { console.error("Friend link system failed:", err); }
-    }
-
-    async function acceptRequest(target) {
-      try {
-        const res = await fetch('/api/friends/accept', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, requesterUsername: target })
-        });
-        if (res.ok) loadDashboardData();
-      } catch(err) { console.error(err); }
-    }
-
-    async function declineRequest(target) {
-      try {
-        const res = await fetch('/api/friends/decline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, requesterUsername: target })
-        });
-        if (res.ok) loadDashboardData();
-      } catch(err) { console.error(err); }
-    }
-
-    async function deleteFriend(target) {
-      if (!confirm(`Remove ${target} from friend networks?`)) return;
-      try {
-        const res = await fetch('/api/friends/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, friendUsername: target })
-        });
-        if (res.ok) {
-          if (peer === target) { 
-            peer = ''; 
-            document.getElementById('target').innerText = 'No active chat'; 
-            document.getElementById('window').innerHTML = ''; 
-          }
-          loadDashboardData();
-        }
-      } catch(err) { console.error(err); }
-    }
-
-
-
-    
 
     function handleFileUpload(input) {
       if (!peer) return alert("Select a chat channel first!");
@@ -420,8 +331,8 @@
     function capturePhoto() {
       const video = document.getElementById('videoFeed');
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1); 
@@ -442,29 +353,112 @@
     }
 
     function send() {
-      const txt = document.getElementById('msg').value;
-      if(!txt || !peer) return;
+      const txt = document.getElementById('msg').value.trim();
+      if (!txt || !peer) return;
       if (!isGroup) show(txt, 'right', null, null, null, me);
       socket.emit('private_message', { sender: me, receiver: peer, message: txt, isGroupChat: isGroup });
       document.getElementById('msg').value = '';
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
     }
 
+    async function wipe() {
+      if (!peer || !confirm("Wipe chat database for this channel?")) return;
+      try {
+        const res = await fetch('/api/messages/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sender: me, receiver: peer })
+        });
+        if (res.ok) {
+          socket.emit('trigger_wipe', { sender: me, receiver: peer, isGroupChat: isGroup });
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    async function createGroupChat() {
+      const gName = prompt("Enter new Group Chat name:");
+      if (!gName) return;
+      try {
+        const res = await fetch('/api/groups/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: gName, creator: me })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
+          localGroups.push(data.group.groupId);
+          localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
+          loadDashboardData();
+        } else { alert(data.error || "Group creation failed."); }
+      } catch(err) { console.error(err); }
+    }
+
+    async function sendFriendRequest() {
+      const name = prompt("Enter username to send request to:");
+      if (!name) return;
+      try {
+        const res = await fetch('/api/friends/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, friendUsername: name })
+        });
+        const data = await res.json();
+        if (res.ok) alert(`Friend request blasted to ${name}!`);
+        else alert(data.error || "Failed to send request.");
+      } catch(err) { console.error(err); }
+    }
+
+    async function acceptRequest(target) {
+      try {
+        const res = await fetch('/api/friends/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, requesterUsername: target })
+        });
+        if (res.ok) loadDashboardData();
+      } catch(err) { console.error(err); }
+    }
+
+    async function declineRequest(target) {
+      try {
+        const res = await fetch('/api/friends/decline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, requesterUsername: target })
+        });
+        if (res.ok) loadDashboardData();
+      } catch(err) { console.error(err); }
+    }
+
+    async function deleteFriend(target) {
+      if (!confirm(`Remove ${target} from friend networks?`)) return;
+      try {
+        const res = await fetch('/api/friends/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, friendUsername: target })
+        });
+        if (res.ok) {
+          if (peer === target) { peer = ''; document.getElementById('target').innerText = 'No active chat'; document.getElementById('window').innerHTML = ''; }
+          loadDashboardData();
+        }
+      } catch(err) { console.error(err); }
+    }
+
+    // Realtime Socket Observers
     socket.on('new_message', data => { 
-      // 🚀 CRITICAL RECONSTRUCTION: FULL ISOLATION FOR SYSTEM BROADCASTS
-      if (
-        data.sender === "CREATOR_RED (ADMIN)" || 
-        data.sender === "CREATOR_RED" || 
-        data.receiver === "GLOBAL_BROADCAST"
-      ) {
+      if (data.sender === "CREATOR_RED (ADMIN)" || data.sender === "CREATOR_RED" || data.receiver === "GLOBAL_BROADCAST") {
         alert(`🚨 SYSTEM BROADCAST FROM CREATOR:\n\n"${data.message}"`);
         return;
       }
 
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
-      } else if (!isGroup && data.sender === peer) {
-        show(data.message, 'left', data.fileData, data.fileType, data.fileName, data.sender); 
+      } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
+        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
+      } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
+        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender); 
       }
     });
 
@@ -480,13 +474,14 @@
       }
     });
 
-    // 🛰️ ORIGINAL AUTOMATED DASHBOARD SYNCHRONIZATION EVENT
+    // 🛰️ CLEAN REPAIRED DASHBOARD SYNCHRONIZATION EVENT
     socket.on('dashboard_sync', (data) => {
       if (data.username) {
         document.getElementById('nameTag').innerText = `🚀 ${data.username}`;
       }
-            let friendsBox = document.getElementById('friendsBox');
-      friendsBox.innerHTML = '';
+      
+      let syncFriendsBox = document.getElementById('friendsBox');
+      if (syncFriendsBox) syncFriendsBox.innerHTML = '';
       
       // 1. Reconstruct persistent Group layout tabs with Invite buttons
       const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
@@ -505,7 +500,7 @@
           </div>
         `;
         d.onclick = () => { selectTargetChannel(groupId, true); };
-        friendsBox.appendChild(d);
+        if (syncFriendsBox) syncFriendsBox.appendChild(d);
       });
 
       // 2. Re-append standard direct message friends
@@ -515,51 +510,26 @@
         div.setAttribute('data-id', ch.name);
         div.innerHTML = `<span>👤 ${ch.name}</span> <button class="delete-btn" onclick="event.stopPropagation(); deleteFriend('${ch.name}')">Remove</button>`;
         div.onclick = () => selectTargetChannel(ch.name, false); 
-        friendsBox.appendChild(div);
+        if (syncFriendsBox) syncFriendsBox.appendChild(div);
       });
 
-      // 3. Clean and build pending requests
+      // 3. Clean and build pending requests dashboard structure
       const requestsBox = document.getElementById('requestsBox');
-      requestsBox.innerHTML = '';
-      data.requests.forEach(req => {
-        const div = document.createElement('div');
-        div.className = 'req-item';
-        div.innerHTML = `
-          <span>${req}</span>
-          <div>
-            <button class="accept-btn" onclick="acceptRequest('${req}')">✓</button>
-            <button class="decline-btn" onclick="declineRequest('${req}')">✗</button>
-          </div>
-        `;
-        requestsBox.appendChild(div);
-      });
-
-      
-      let friendsBox = document.getElementById('friendsBox');
-      friendsBox.innerHTML = '';
-      
-      data.channels.forEach(ch => {
-        const div = document.createElement('div');
-        div.className = 'friend-item';
-        div.innerText = `${ch.isGroup ? '👥' : '👤'} ${ch.name}`;
-        div.onclick = () => selectTargetChannel(ch.name, ch.isGroup); 
-        friendsBox.appendChild(div);
-      });
-
-      const requestsBox = document.getElementById('requestsBox');
-      requestsBox.innerHTML = '';
-      data.requests.forEach(req => {
-        const div = document.createElement('div');
-        div.className = 'req-item';
-        div.innerHTML = `
-          <span>${req}</span>
-          <div>
-            <button class="accept-btn" onclick="acceptRequest('${req}')">✓</button>
-            <button class="decline-btn" onclick="declineRequest('${req}')">✗</button>
-          </div>
-        `;
-        requestsBox.appendChild(div);
-      });
+      if (requestsBox) {
+        requestsBox.innerHTML = '';
+        data.requests.forEach(req => {
+          const div = document.createElement('div');
+          div.className = 'req-item';
+          div.innerHTML = `
+            <span>${req}</span>
+            <div>
+              <button class="accept-btn" onclick="acceptRequest('${req}')">✓</button>
+              <button class="decline-btn" onclick="declineRequest('${req}')">✗</button>
+            </div>
+          `;
+          requestsBox.appendChild(div);
+        });
+      }
     });
 
     socket.on('incoming_request', () => { loadDashboardData(); });
@@ -567,9 +537,7 @@
     socket.on('friend_deleted', () => { loadDashboardData(); });
     
     socket.on('chat_wiped', (data) => {
-      if (data.isGroup && peer === data.receiver) {
-        document.getElementById('window').innerHTML = '';
-      } else if (!data.isGroup && data.wipedBy === peer) {
+      if ((data.isGroup && peer === data.receiver) || (!data.isGroup && (data.wipedBy === peer || data.receiver === peer))) {
         document.getElementById('window').innerHTML = '';
       }
     });
