@@ -188,6 +188,22 @@
       }
       loadDashboardData();
     }
+        async function inviteToGroup(event, groupId) {
+      event.stopPropagation(); 
+      const targetUser = prompt("Enter username to invite to this group chat:");
+      if (!targetUser) return;
+      try {
+        const res = await fetch('/api/groups/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId, creatorUsername: me, targetUsername: targetUser })
+        });
+        const data = await res.json();
+        if (res.ok) alert("User added to group channel database successfully!");
+        else alert(data.error || "Invite rejected.");
+      } catch(err) { console.error("Group invitation pipe issue:", err); }
+    }
+
 
     function appendRequestDOM(name) {
       const d = document.createElement('div');
@@ -469,6 +485,55 @@
       if (data.username) {
         document.getElementById('nameTag').innerText = `🚀 ${data.username}`;
       }
+            const friendsBox = document.getElementById('friendsBox');
+      friendsBox.innerHTML = '';
+      
+      // 1. Reconstruct persistent Group layout tabs with Invite buttons
+      const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
+      localGroups.forEach(groupId => {
+        const d = document.createElement('div');
+        d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
+        d.setAttribute('data-id', groupId);
+        d.style.borderLeft = "4px solid #6a0dad";
+        
+        const displayLabel = groupId.replace('group_', '').toUpperCase();
+        d.innerHTML = `
+          <span>👥 ${displayLabel}</span> 
+          <div>
+            <button class="accept-btn" style="background:#6a0dad; color:white; padding:4px 8px; font-size:12px; border-radius:3px; margin-right:5px;" onclick="inviteToGroup(event, '${groupId}')">Invite</button>
+            <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>
+          </div>
+        `;
+        d.onclick = () => { selectTargetChannel(groupId, true); };
+        friendsBox.appendChild(d);
+      });
+
+      // 2. Re-append standard direct message friends
+      data.channels.forEach(ch => {
+        const div = document.createElement('div');
+        div.className = `friend-item ${peer === ch.name && !isGroup ? 'active' : ''}`;
+        div.setAttribute('data-id', ch.name);
+        div.innerHTML = `<span>👤 ${ch.name}</span> <button class="delete-btn" onclick="event.stopPropagation(); deleteFriend('${ch.name}')">Remove</button>`;
+        div.onclick = () => selectTargetChannel(ch.name, false); 
+        friendsBox.appendChild(div);
+      });
+
+      // 3. Clean and build pending requests
+      const requestsBox = document.getElementById('requestsBox');
+      requestsBox.innerHTML = '';
+      data.requests.forEach(req => {
+        const div = document.createElement('div');
+        div.className = 'req-item';
+        div.innerHTML = `
+          <span>${req}</span>
+          <div>
+            <button class="accept-btn" onclick="acceptRequest('${req}')">✓</button>
+            <button class="decline-btn" onclick="declineRequest('${req}')">✗</button>
+          </div>
+        `;
+        requestsBox.appendChild(div);
+      });
+
       
       const friendsBox = document.getElementById('friendsBox');
       friendsBox.innerHTML = '';
