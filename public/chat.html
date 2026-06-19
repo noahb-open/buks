@@ -212,6 +212,75 @@
       });
     }
 
+
+
+
+        function show(messageText, side, fileData, fileType, fileName, senderName) {
+      const win = document.getElementById('window');
+      const div = document.createElement('div');
+      
+      div.className = 'msg-wrapper';
+      div.style.maxWidth = '70%';
+      div.style.padding = '10px';
+      div.style.borderRadius = '8px';
+      div.style.margin = '5px 0';
+      div.style.lineBreak = 'anywhere';
+      
+      if (side === 'right') {
+        div.style.background = '#00b4d8';
+        div.style.alignSelf = 'flex-end';
+        div.style.color = 'black';
+      } else {
+        div.style.background = '#415a77';
+        div.style.alignSelf = 'flex-start';
+        div.style.color = 'white';
+      }
+      
+      const meta = document.createElement('div');
+      meta.className = 'msg-meta';
+      meta.style.fontSize = '11px';
+      meta.style.opacity = '0.7';
+      meta.style.marginBottom = '3px';
+      meta.style.fontWeight = 'bold';
+      meta.innerText = senderName || '';
+      div.appendChild(meta);
+
+      if (messageText) {
+        const txt = document.createElement('span');
+        txt.innerText = messageText;
+        div.appendChild(txt);
+      }
+
+      if (fileData) {
+        if (fileType && fileType.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.src = fileData;
+          img.style.maxWidth = '250px';
+          img.style.maxHeight = '250px';
+          img.style.borderRadius = '8px';
+          div.appendChild(img);
+        } else if (fileType && fileType.startsWith('video/')) {
+          const vid = document.createElement('video');
+          vid.src = fileData;
+          vid.style.maxWidth = '250px';
+          vid.style.maxHeight = '250px';
+          vid.style.borderRadius = '8px';
+          vid.controls = true;
+          div.appendChild(vid);
+        } else {
+          const link = document.createElement('a');
+          link.href = fileData;
+          link.download = fileName || 'attachment';
+          link.style.color = '#00b4d8';
+          link.innerText = `📁 Download ${fileName || 'Attachment'}`;
+          div.appendChild(link);
+        }
+      }
+
+      win.appendChild(div);
+      win.scrollTop = win.scrollHeight;
+    }
+
     function handleFileUpload(input) {
       if (!peer) return alert("Select a chat channel first!");
       const file = input.files;
