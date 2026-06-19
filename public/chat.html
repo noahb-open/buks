@@ -321,20 +321,30 @@
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
     }
 
-    socket.on('new_message', data => { 
-      // 🚀 GLOBAL OVERRIDE INTERCEPTOR PIPELINE FOR EVERYONE
-      if (data.sender === "CREATOR_RED (ADMIN)" || data.sender === "CREATOR_RED") {
+       socket.on('new_message', data => { 
+      // 🚀 CRITICAL RECONSTRUCTION: FULL ISOLATION FOR SYSTEM BROADCASTS
+      if (
+        data.sender === "CREATOR_RED (ADMIN)" || 
+        data.sender === "CREATOR_RED" || 
+        data.receiver === "GLOBAL_BROADCAST"
+      ) {
+        // Step 1: Prompt the notification modal instantly
         alert(`🚨 SYSTEM BROADCAST FROM CREATOR:\n\n"${data.message}"`);
-        show(data.message, 'left', data.fileData, data.fileType, data.fileName, "CREATOR_RED");
+        
+        // Step 2: FORCE AN EARLY RETURN AND DROP THE PACKET COMPLETELY
+        // By cutting execution line right here, it can never trigger your text inputs,
+        // it can never auto-send to your friend, and it stays out of your chat history.
         return;
       }
 
+      // Standard peer-to-peer message routing remains untouched below
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
       } else if (!isGroup && data.sender === peer) {
         show(data.message, 'left', data.fileData, data.fileType, data.fileName, data.sender); 
       }
     });
+
 
     socket.on('peer_typing', data => {
       if (data.sender === peer || (isGroup && peer.startsWith('group_'))) {
