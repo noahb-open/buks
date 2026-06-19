@@ -40,6 +40,7 @@
     #videoFeed { width: 320px; height: 240px; background: #000; border-radius: 6px; transform: scaleX(-1); }
     
     #typingIndicator { font-style: italic; color: #38b000; font-size: 13px; margin-left: 15px; display: none; padding-bottom: 5px; }
+    #rosterBar { font-size: 12px; color: #a4c3b2; opacity: 0.8; margin-top: 3px; font-weight: normal; }
   </style>
 </head>
 <body>
@@ -65,13 +66,19 @@
     <h4>Pending Requests 📩</h4>
     <div id="requestsBox"></div>
 
+    <h4>Group Invites 👥</h4>
+    <div id="groupInvitesBox"></div>
+
     <h4>Channels & Friends 🚀</h4>
     <div id="friendsBox"></div>
   </div>
 
   <div class="main">
     <div style="display:flex; justify-content:space-between; align-items:center; background:#1b263b; padding-right:15px;">
-      <div id="target" style="padding:15px; font-size:18px; font-weight:bold;">No active chat</div>
+      <div style="padding:15px; font-size:18px; font-weight:bold; display: flex; flex-direction: column;">
+        <span id="target">No active chat</span>
+        <span id="rosterBar"></span>
+      </div>
       <div id="typingIndicator">typing...</div>
     </div>
     <div class="box" id="window"></div>
@@ -136,6 +143,13 @@
           requestsContainer.innerHTML = ''; 
           (data.requests || []).forEach(name => appendRequestDOM(name));
         }
+
+        // Render group requests tray
+        const groupInvitesBox = document.getElementById('groupInvitesBox');
+        if (groupInvitesBox) {
+          groupInvitesBox.innerHTML = '';
+          (data.groupRequests || []).forEach(req => appendGroupInviteDOM(req));
+        }
       } catch (err) {
         console.error("Dashboard render stall caught:", err);
       }
@@ -192,6 +206,7 @@
       if (peer === groupId) { 
         peer = ''; 
         document.getElementById('target').innerText = 'No active chat'; 
+        document.getElementById('rosterBar').innerText = '';
         document.getElementById('window').innerHTML = ''; 
       }
       loadDashboardData();
@@ -208,9 +223,52 @@
           body: JSON.stringify({ groupId, creatorUsername: me, targetUsername: targetUser })
         });
         const data = await res.json();
-        if (res.ok) alert("User added to group channel database successfully!");
+        if (res.ok) alert("Invitation sent successfully! Staged for user confirmation.");
         else alert(data.error || "Invite rejected.");
       } catch(err) { console.error("Group invitation pipe issue:", err); }
+    }
+
+    function appendGroupInviteDOM(req) {
+      const d = document.createElement('div');
+      d.className = 'req-item';
+      d.innerHTML = `
+        <span style="font-size:12px;">👥 ${req.groupName.toUpperCase()} <i style="opacity:0.6;">by ${req.invitedBy}</i></span>
+        <div>
+          <button class="accept-btn" onclick="acceptGroupInvite('${req.groupId}')">✓</button>
+          <button class="decline-btn" onclick="declineGroupInvite('${req.groupId}')">✗</button>
+        </div>
+      `;
+      document.getElementById('groupInvitesBox').appendChild(d);
+    }
+
+    async function acceptGroupInvite(groupId) {
+      try {
+        const res = await fetch('/api/groups/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, groupId })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
+          if (!localGroups.includes(data.groupId)) {
+            localGroups.push(data.groupId);
+            localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
+          }
+          loadDashboardData();
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    async function declineGroupInvite(groupId) {
+      try {
+        const res = await fetch('/api/groups/decline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ myUsername: me, groupId })
+        });
+        if (res.ok) loadDashboardData();
+      } catch (err) { console.error(err); }
     }
 
     function appendRequestDOM(name) {
@@ -226,6 +284,20 @@
       document.getElementById('typingIndicator').style.display = 'none';
       document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: @${name}`;
       document.getElementById('window').innerHTML = '';
+
+      const rosterContainer = document.getElementById('rosterBar');
+      if (isGroup) {
+        rosterContainer.innerText = "Fetching member network roster...";
+        try {
+          const rRes = await fetch(`/api/groups/members/${name}`);
+          if (rRes.ok) {
+            const rData = await rRes.json();
+            rosterContainer.innerText = `Members: ${rData.members.join(', ')}`;
+          }
+        } catch (err) { rosterContainer.innerText = ""; }
+      } else {
+        rosterContainer.innerText = "";
+      }
 
       document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
       const activeEl = document.querySelector(`.friend-item[data-id="${name}"]`);
@@ -437,7 +509,7 @@
           body: JSON.stringify({ myUsername: me, friendUsername: target })
         });
         if (res.ok) {
-          if (peer === target) { peer = ''; document.getElementById('target').innerText = 'No active chat'; document.getElementById('window').innerHTML = ''; }
+          if (peer === target) { peer = ''; document.getElementById('target').innerText = 'No active chat'; document.getElementById('rosterBar').innerText = ''; document.getElementById('window').innerHTML = ''; }
           loadDashboardData();
         }
       } catch(err) { console.error(err); }
@@ -525,9 +597,19 @@
           requestsBox.appendChild(div);
         });
       }
+
+      // Re-append Group Invites containers dynamically on socket sync signals
+      const groupInvitesBox = document.getElementById('groupInvitesBox');
+      if (groupInvitesBox) {
+        groupInvitesBox.innerHTML = '';
+        (data.groupRequests || []).forEach(gReq => {
+          appendGroupInviteDOM(gReq);
+        });
+      }
     });
 
     socket.on('incoming_request', () => { loadDashboardData(); });
+    socket.on('incoming_group_request', () => { loadDashboardData(); }); 
     socket.on('request_accepted', () => { loadDashboardData(); });
     socket.on('friend_deleted', () => { loadDashboardData(); });
     
