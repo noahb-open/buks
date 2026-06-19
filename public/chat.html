@@ -47,16 +47,18 @@
   </div>
 
    <div class="side">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <h3 id="nameTag" style="margin: 0;">🚀 User</h3>
-      <!-- 🔴 NEW LOGOUT BUTTON -->
-      <!-- Check your sidebar HTML to ensure it uses the matching trigger name -->
-     <!-- 🚀 DIRECT HYPERLINK LOGOUT BYPASS -->
-<a href="messa.up.railway.app" 
-   onclick="localStorage.removeItem('username');" 
-   style="background: #e63946; color: white; padding: 6px 12px; font-size: 13px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;">
-   Log Out
-</a>
+    <!-- 🚀 FIXED SEPARATION BLOCK: Only a single, organized container survives -->
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+      <h3 id="nameTag" style="margin: 0; font-size: 20px; white-space: nowrap;">🚀 User</h3>
+      
+      <a href="https://messa.up.railway.app" 
+         onclick="localStorage.removeItem('username');" 
+         style="background: #e63946; color: white; padding: 8px 12px; font-size: 13px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block; text-align: center; width: fit-content;">
+         Log Out
+      </a>
+    </div>
+
+
 
 
     
