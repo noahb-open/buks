@@ -8,17 +8,17 @@
     body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
     .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; display: flex; flex-direction: column; overflow-y: auto;}
     .main { width: 75%; display: flex; flex-direction: column; background: #000814; }
-    .box { flex-grow: 1; padding: 20px; overflow-y: auto; }
+    .box { flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
     .input-bar { padding: 15px; display: flex; gap: 10px; background: #1b263b; align-items: center; }
-    input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
+    input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; background: #415a77; color: white; }
     button { padding: 10px 15px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
     
     .nav-btn-grid { display: flex; gap: 10px; margin-bottom: 15px; }
-    .friend-btn { flex-grow: 1; padding: 10px; background: #0077b6; color: white; }
-    .group-create-btn { flex-grow: 1; padding: 10px; background: #6a0dad; color: white; }
+    .friend-btn { flex-grow: 1; padding: 10px; background: #0077b6; color: white; border-radius: 5px; font-size: 13px; text-align: center; }
+    .group-create-btn { flex-grow: 1; padding: 10px; background: #6a0dad; color: white; border-radius: 5px; font-size: 13px; text-align: center; }
     
     .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-    .friend-item:hover { background: #0077b6; }
+    .friend-item:hover, .friend-item.active { background: #0077b6; }
     .req-item { padding: 10px; background: #5c677d; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
     .accept-btn { background: #38b000; color: white; padding: 4px 8px; font-size: 12px; margin-right: 5px; border-radius: 3px; }
     .decline-btn { background: #e63946; color: white; padding: 4px 8px; font-size: 12px; border-radius: 3px; }
@@ -28,6 +28,11 @@
     .wipe-btn { background: #d90429; color: white; }
     .media-btn { background: #e0e1dd; color: #0d1b2a; font-size: 18px; padding: 8px 12px; }
     h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
+    
+    .msg-wrapper { max-width: 70%; padding: 10px; border-radius: 8px; line-break: anywhere; }
+    .msg-me { background: #00b4d8; align-self: flex-end; color: black; }
+    .msg-peer { background: #415a77; align-self: flex-start; color: white; }
+    .msg-meta { font-size: 11px; opacity: 0.7; margin-bottom: 3px; font-weight: bold; }
     
     .chat-img, .chat-video { max-width: 250px; max-height: 250px; border-radius: 8px; margin-top: 5px; display: block; border: 2px solid rgba(255,255,255,0.1); }
     .file-link { color: #00b4d8; text-decoration: underline; font-weight: bold; display: inline-block; margin-top: 5px; }
@@ -46,21 +51,16 @@
     <button onclick="closeCamera()" style="background:#d90429; color:white;">Cancel</button>
   </div>
 
-   <div class="side">
-    <!-- 🚀 FIXED SEPARATION BLOCK: Only a single, organized container survives -->
+  <div class="side">
     <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
       <h3 id="nameTag" style="margin: 0; font-size: 20px; white-space: nowrap;">🚀 User</h3>
-      
-      <a href="https://messa.up.railway.app" 
-         onclick="localStorage.removeItem('username');" 
-         style="background: #e63946; color: white; padding: 8px 12px; font-size: 13px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block; text-align: center; width: fit-content;">
-         Log Out
-      </a>
+      <a href="/" onclick="localStorage.removeItem('username');" style="background: #e63946; color: white; padding: 8px 12px; font-size: 13px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block; text-align: center; width: fit-content;">Log Out</a>
     </div>
 
-
-
-
+    <div class="nav-btn-grid">
+      <button class="friend-btn" onclick="sendFriendRequest()">➕ Add Friend</button>
+      <button class="group-create-btn" onclick="createGroupChat()">⚡ New Group</button>
+    </div>
     
     <h4>Pending Requests 📩</h4>
     <div id="requestsBox"></div>
@@ -68,6 +68,7 @@
     <h4>Channels & Friends 🚀</h4>
     <div id="friendsBox"></div>
   </div>
+
   <div class="main">
     <div style="display:flex; justify-content:space-between; align-items:center; background:#1b263b; padding-right:15px;">
       <div id="target" style="padding:15px; font-size:18px; font-weight:bold;">No active chat</div>
@@ -85,22 +86,17 @@
   </div>
 
   <script>
-       const socket = io();
-    
-    // 🚀 THE ORIGINAL DYNAMIC METHOD
-    // Reads whoever is actively logged in via session cookie or current token parameters
+    const socket = io();
     const me = localStorage.getItem('username') || 'user';
     let peer = '';
     let isGroup = false;
     let streamInstance = null;
     let typingTimeout;
+
+    document.getElementById('nameTag').innerText = `🚀 ${me}`;
     
-    // Join the socket server immediately using your active handle
     socket.emit('join', me);
-
-    // Run the automatic data sync function to pull your true profile live
     loadDashboardData();
-
 
     function handleKeyPress(event) {
       if (event.key === 'Enter') {
@@ -112,7 +108,6 @@
     function emitTypingStatus() {
       if (!peer) return;
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: true });
-      
       clearTimeout(typingTimeout);
       typingTimeout = setTimeout(() => {
         socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
@@ -125,111 +120,66 @@
         if (!res.ok) throw new Error("Dashboard sync failure");
         const data = await res.json();
         
-        const currentFriends = data.friends || [];
-        const currentRequests = data.requests || [];
-
         const friendsContainer = document.getElementById('friendsBox');
         friendsContainer.innerHTML = ''; 
         
+        // Render stored groups
         const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-        localGroups.forEach(groupName => appendGroupDOM(groupName));
+        localGroups.forEach(groupId => appendGroupDOM(groupId));
 
-        currentFriends.forEach(name => appendFriendDOM(name));
+        // Render Direct Friends
+        (data.friends || []).forEach(name => appendFriendDOM(name));
 
+        // Render Request box
         const requestsContainer = document.getElementById('requestsBox');
         requestsContainer.innerHTML = ''; 
-        currentRequests.forEach(name => appendRequestDOM(name));
+        (data.requests || []).forEach(name => appendRequestDOM(name));
       } catch (err) {
         console.error("Dashboard render stall caught:", err);
       }
     }
 
-    function createGroupChat() {
-      const gName = prompt("Put the name of the group you want to make/join:");
-      if (!gName) return;
-      
-      const cleanGid = 'group_' + gName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      
-      const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      if (localGroups.includes(cleanGid)) return alert("You are already in this group room!");
-      
-      localGroups.push(cleanGid);
-      localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-      
-      socket.emit('join', cleanGid);
-      loadDashboardData();
-    }
-
-    async function sendFriendRequest() {
-      const name = prompt("Enter username to send request to:");
-      if(!name) return;
-      try {
-        const res = await fetch('/api/friends/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, friendUsername: name })
-        });
-        const data = await res.json();
-        if(res.ok) alert(`Friend request blasted to ${name}!`);
-        else alert(data.error || "Failed to send request.");
-      } catch (err) { alert("Network communication error."); }
-    }
-
-    async function acceptRequest(senderName) {
-      const res = await fetch('/api/friends/accept', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
-      });
-      if(res.ok) loadDashboardData();
-    }
-
-    async function declineRequest(senderName) {
-      const res = await fetch('/api/friends/decline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ myUsername: me, requesterUsername: senderName })
-      });
-      if(res.ok) loadDashboardData();
-    }
-
-    async function deleteFriend(event, friendName) {
-      event.stopPropagation(); 
-      if (!confirm("Remove " + friendName + "?")) return;
-      const res = await fetch('/api/friends/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ myUsername: me, friendUsername: friendName })
-      });
-      if(res.ok) {
-        if (peer === friendName) { peer = ''; document.getElementById('target').innerText = 'No active chat'; document.getElementById('window').innerHTML = ''; }
-        loadDashboardData();
-      }
-    }
-
     function appendFriendDOM(name) {
-      const d = document.createElement('div');
-      d.className = 'friend-item';
-      d.onclick = () => { selectTargetChannel(name, false); };
-      d.innerHTML = `<span>👤 ${name}</span> <button class="delete-btn" onclick="deleteFriend(event, '${name}')">Remove</button>`;
-      document.getElementById('friendsBox').appendChild(d);
+      const box = document.getElementById('friendsBox');
+      const div = document.createElement('div');
+      div.className = `friend-item ${peer === name && !isGroup ? 'active' : ''}`;
+      div.setAttribute('data-id', name);
+      
+      const span = document.createElement('span');
+      span.innerText = `👤 ${name}`;
+      div.appendChild(span);
+
+      div.onclick = () => selectTargetChannel(name, false);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.innerText = 'Remove';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteFriend(name);
+      };
+      div.appendChild(delBtn);
+      box.appendChild(div);
     }
 
     function appendGroupDOM(groupId) {
+      const box = document.getElementById('friendsBox');
       const d = document.createElement('div');
-      d.className = 'friend-item';
+      d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
+      d.setAttribute('data-id', groupId);
       d.style.borderLeft = "4px solid #6a0dad";
       d.onclick = () => { selectTargetChannel(groupId, true); };
+      
       const displayLabel = groupId.replace('group_', '').toUpperCase();
       d.innerHTML = `<span>👥 ${displayLabel}</span> <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>`;
-      document.getElementById('friendsBox').appendChild(d);
+      box.appendChild(d);
       socket.emit('join', groupId);
     }
 
     function removeGroupLocal(event, groupId) {
       event.stopPropagation();
       let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-            localGroups = localGroups.filter(g => g !== groupId);
+      localGroups = localGroups.filter(g => g !== groupId);
       localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
       if (peer === groupId) { 
         peer = ''; 
@@ -250,9 +200,9 @@
       peer = name;
       isGroup = isGroupRoom;
       document.getElementById('typingIndicator').style.display = 'none';
-      document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: ${name}`;
+      document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: @${name}`;
       document.getElementById('window').innerHTML = '';
-
+          // 🚀 REST OF THE SCRIPT ENGINE
       const res = await fetch(`/api/messages/${me}/${name}`);
       const messages = await res.json();
       
@@ -335,30 +285,23 @@
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
     }
 
-       socket.on('new_message', data => { 
+    socket.on('new_message', data => { 
       // 🚀 CRITICAL RECONSTRUCTION: FULL ISOLATION FOR SYSTEM BROADCASTS
       if (
         data.sender === "CREATOR_RED (ADMIN)" || 
         data.sender === "CREATOR_RED" || 
         data.receiver === "GLOBAL_BROADCAST"
       ) {
-        // Step 1: Prompt the notification modal instantly
         alert(`🚨 SYSTEM BROADCAST FROM CREATOR:\n\n"${data.message}"`);
-        
-        // Step 2: FORCE AN EARLY RETURN AND DROP THE PACKET COMPLETELY
-        // By cutting execution line right here, it can never trigger your text inputs,
-        // it can never auto-send to your friend, and it stays out of your chat history.
         return;
       }
 
-      // Standard peer-to-peer message routing remains untouched below
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
       } else if (!isGroup && data.sender === peer) {
         show(data.message, 'left', data.fileData, data.fileType, data.fileName, data.sender); 
       }
     });
-
 
     socket.on('peer_typing', data => {
       if (data.sender === peer || (isGroup && peer.startsWith('group_'))) {
@@ -371,14 +314,13 @@
         }
       }
     });
-        // 🛰️ ORIGINAL AUTOMATED DASHBOARD SYNCHRONIZATION EVENT
+
+    // 🛰️ ORIGINAL AUTOMATED DASHBOARD SYNCHRONIZATION EVENT
     socket.on('dashboard_sync', (data) => {
-      // Updates your side panel profile header dynamically with your real MongoDB username
       if (data.username) {
         document.getElementById('nameTag').innerText = `🚀 ${data.username}`;
       }
       
-      // Cleans and populates your active friend list channels layout
       const friendsBox = document.getElementById('friendsBox');
       friendsBox.innerHTML = '';
       
@@ -386,11 +328,10 @@
         const div = document.createElement('div');
         div.className = 'friend-item';
         div.innerText = `${ch.isGroup ? '👥' : '👤'} ${ch.name}`;
-        div.onclick = () => selectTargetChannel(ch.name, ch.isGroup); // Linked to your custom click channel function
+        div.onclick = () => selectTargetChannel(ch.name, ch.isGroup); 
         friendsBox.appendChild(div);
       });
 
-      // Cleans and builds your pending requests dashboard structure
       const requestsBox = document.getElementById('requestsBox');
       requestsBox.innerHTML = '';
       data.requests.forEach(req => {
@@ -407,7 +348,6 @@
       });
     });
 
-
     socket.on('incoming_request', () => { loadDashboardData(); });
     socket.on('request_accepted', () => { loadDashboardData(); });
     socket.on('friend_deleted', () => { loadDashboardData(); });
@@ -419,92 +359,6 @@
         document.getElementById('window').innerHTML = '';
       }
     });
-
-    async function wipe() {
-      if(!peer) return;
-      if (!confirm("Permanently wipe conversation history for everyone?")) return;
-      await fetch('/api/messages/delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sender: me, receiver: peer })
-      });
-      document.getElementById('window').innerHTML = '';
-      socket.emit('trigger_wipe', { sender: me, receiver: peer, isGroupChat: isGroup });
-    }
-
-    function show(t, side, fileData = null, fileType = null, fileName = null, speakerName = '') {
-      const el = document.createElement('div');
-      el.style.textAlign = side === 'right' ? 'right' : 'left';
-      el.style.margin = "10px 0";
-      
-      const inner = document.createElement('div');
-      inner.style.background = side === 'right' ? '#0077b6' : '#222';
-      inner.style.padding = "10px";
-      inner.style.borderRadius = "8px";
-      inner.style.maxWidth = "60%";
-      inner.style.display = "inline-block";
-      inner.style.textAlign = "left";
-      
-      if (isGroup && speakerName && side === 'left') {
-        const nameHeader = document.createElement('div');
-        nameHeader.innerText = speakerName;
-        nameHeader.style.fontSize = "11px";
-        nameHeader.style.color = "#00b4d8";
-        nameHeader.style.fontWeight = "bold";
-        nameHeader.style.marginBottom = "3px";
-        inner.appendChild(nameHeader);
-      }
-      
-      if (t) {
-        const textNode = document.createElement('div');
-        textNode.innerText = t;
-        inner.appendChild(textNode);
-      }
-      
-      if (fileData) {
-        if (fileType && fileType.startsWith('image/')) {
-          const img = document.createElement('img');
-          img.src = fileData;
-          img.className = 'chat-img';
-          inner.appendChild(img);
-        } else if (fileType && fileType.startsWith('video/')) {
-          const videoElement = document.createElement('video');
-          videoElement.src = fileData;
-          videoElement.className = 'chat-video';
-          videoElement.controls = true;
-          inner.appendChild(videoElement);
-        } else {
-          const link = document.createElement('a');
-          link.href = fileData;
-          link.download = fileName || "download";
-          link.className = 'file-link';
-          link.innerText = "📄 Download: " + (fileName || "Attached File");
-          inner.appendChild(link);
-        }
-      }
-          }
-  }
-
-  // 🟢 First, we finish and append the elements for the show function
-  el.appendChild(inner);
-  document.getElementById('window').appendChild(el);
-  const win = document.getElementById('window');
-  win.scrollTop = win.scrollHeight;
-} // 🟢 This closing bracket completely finishes the show() function safely
-
-// 🔴 NOW LOGOUT SITS CLEANLY OUTSIDE ON ITS OWN
-function triggerLogout() {
-  if (!confirm("Are you sure you want to log out of Blue Rocket?")) return;
-  
-  // Step 1: Tell the server we are leaving so it decouples our active socket session
-  socket.disconnect();
-  
-  // Step 2: Clear user tracking parameters
-  localStorage.removeItem('username');
-  
-  // Step 3: Evacuate back to the login launchpad portal
-  window.location.href = '/index.html';
-}
-</script>
+  </script>
 </body>
 </html>
