@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 
 const User = require('./models/User');
 const Message = require('./models/Message');
-const Group = require('./models/Group'); // 🚀 Import group schema
+const Group = require('./models/Group'); 
 
 const app = express();
 const server = http.createServer(app);
@@ -28,18 +28,17 @@ mongoose.connection.once('open', async () => {
     const adminEmail = "creator@bluerocket.net";
     const secureHash = await bcrypt.hash("h!vemind12", 10);
 
-    // Completely wipe any duplicate or broken creator accounts
     await User.deleteMany({ username: "CREATOR_RED" });
     await User.deleteMany({ email: adminEmail });
 
-    // Insert a fresh, perfectly encrypted master profile block
     const freshAdmin = new User({
       username: "CREATOR_RED",
       email: adminEmail,
       password: secureHash,
       isVerified: true,
       friends: [],
-      requests: []
+      requests: [],
+      groupRequests: [] // Added schema support layer
     });
     await freshAdmin.save();
     console.log("SUCCESS: CREATOR_RED node fully rebuilt and encrypted locally! 🛡️");
@@ -56,7 +55,7 @@ app.post('/api/signup', async (req, res) => {
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999", friends: [], requests: [] });
+    const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999", friends: [], requests: [], groupRequests: [] });
     await newUser.save();
 
     res.status(201).json({ message: 'User created successfully!' });
@@ -93,9 +92,7 @@ app.post('/api/login', async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) return res.status(400).json({ success: false, message: 'Wrong credentials.' });
 
-    // ✨ Fix: Generate JWT token on successful login
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
     res.json({ success: true, token, username: user.username });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -193,7 +190,7 @@ app.post('/api/groups/create', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 CREATOR-ONLY INVITE ROUTE
+// 🚀 UPDATED: STAGED INVITE SYSTEM (Pushes to target's pending invites tray)
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
@@ -206,19 +203,77 @@ app.post('/api/groups/invite', async (req, res) => {
     if (!targetUser) return res.status(404).json({ error: "User does not exist." });
 
     if (group.members.includes(targetUsername)) return res.status(400).json({ error: "User is already a member!" });
+    
+    if (!targetUser.groupRequests) targetUser.groupRequests = [];
+    
+    // Stop duplicate invite requests
+    const alreadyInvited = targetUser.groupRequests.some(req => req.groupId === groupId);
+    if (alreadyInvited) return res.status(400).json({ error: "Invite request already pending!" });
 
-    group.members.push(targetUsername);
-    await group.save();
-    res.json({ success: true, message: "Member added successfully!" });
+    // Stage invitation data object
+    targetUser.groupRequests.push({ groupId, groupName: group.name, invitedBy: creatorUsername });
+    await targetUser.save();
+
+    io.to(targetUsername).emit('incoming_group_request');
+    res.json({ success: true, message: "Invitation pending user acceptance!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 📊 DASHBOARD DATA SYNC ENDPOINT
+// 🚀 NEW: ACCEPT GROUP INVITATION ROUTE
+app.post('/api/groups/accept', async (req, res) => {
+  try {
+    const { myUsername, groupId } = req.body;
+    const me = await User.findOne({ username: myUsername });
+    const group = await Group.findOne({ groupId });
+
+    if (!me || !group) return res.status(404).json({ error: "Records missing." });
+
+    // Strip invite object out of user tray
+    me.groupRequests = me.groupRequests.filter(req => req.groupId !== groupId);
+    await me.save();
+
+    // Push into active group member database array
+    if (!group.members.includes(myUsername)) {
+      group.members.push(myUsername);
+      await group.save();
+    }
+
+    res.json({ success: true, groupName: group.name, groupId: group.groupId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 🚀 NEW: DECLINE GROUP INVITATION ROUTE
+app.post('/api/groups/decline', async (req, res) => {
+  try {
+    const { myUsername, groupId } = req.body;
+    const me = await User.findOne({ username: myUsername });
+    if (!me) return res.status(404).json({ error: "User records missing." });
+    me.groupRequests = me.groupRequests.filter(req => req.groupId !== groupId);
+    await me.save();
+
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 🚀 NEW: FETCH GROUP MEMBER DETAIL LIST
+app.get('/api/groups/members/:groupId', async (req, res) => {
+  try {
+    const group = await Group.findOne({ groupId: req.params.groupId });
+    if (!group) return res.status(404).json({ error: "Group missing" });
+    res.json({ members: group.members || [] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 📊 UPDATED DASHBOARD DATA SYNC ENDPOINT (Delivers staged invitations)
 app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
     if (!user) return res.status(404).json({ error: "User not found" });
-    res.json({ friends: user.friends || [], requests: user.requests || [] });
+    res.json({ 
+      friends: user.friends || [], 
+      requests: user.requests || [],
+      groupRequests: user.groupRequests || [] // Synced payload asset
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -276,7 +331,8 @@ io.on('connection', (socket) => {
         socket.emit('dashboard_sync', {
           username: user.username,
           channels: formatChannels,
-          requests: user.requests || []
+          requests: user.requests || [],
+          groupRequests: user.groupRequests || []
         });
       }
     } catch (err) {
