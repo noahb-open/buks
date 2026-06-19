@@ -453,7 +453,13 @@
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
       } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
-        show(data.message, data.sender === me ? 'right' : '        const element = document.getElementById('typingIndicator');
+        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender); 
+      }
+    });
+
+    socket.on('peer_typing', data => {
+      if (data.sender === peer || (isGroup && peer.startsWith('group_'))) {
+        const element = document.getElementById('typingIndicator');
         if (data.isTyping) {
           element.innerText = data.sender + " is typing...";
           element.style.display = 'block';
@@ -533,5 +539,3 @@
   </script>
 </body>
 </html>
-
-    });
