@@ -59,22 +59,23 @@
       }
     }
 
-    function blastMessage() {
-      const txt = document.getElementById('broadcastMsg').value.trim();
+       function blastMessage() {
+      const textarea = document.getElementById('broadcastMsg');
+      const txt = textarea.value.trim();
       if (!txt) return;
 
       const words = txt.split(/\s+/).length;
       if (words > 1000) return alert("Cannot send. Word count is too high!");
 
-      // 🛠️ FIXED PAYLOAD: Setting receiver to "CREATOR_RED (ADMIN)" triggers your chat.html interceptor pipeline
+      // Transmit directly into the server's global override gate
       socket.emit('private_message', { 
-        sender: "CREATOR_RED (ADMIN)", 
+        sender: "CREATOR_RED", 
         receiver: "GLOBAL_BROADCAST", 
         message: txt,
         isGroupChat: false 
       });
 
-      document.getElementById('broadcastMsg').value = '';
+      textarea.value = '';
       document.getElementById('wordCountDisplay').innerText = `Words: 0 / 1000`;
       alert("Broadcast transmitted successfully!");
     }
