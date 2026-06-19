@@ -86,7 +86,16 @@
 
   <script>
     const socket = io();
-    const me = localStorage.getItem('username') || 'user';
+    
+    // 🚀 DYNAMIC ROUTE GUARD: Pulls whoever is logged in
+    const me = localStorage.getItem('username');
+    
+    // If NO ONE is logged in, do not say "User"—kick them back to the gateway!
+    if (!me || me === 'user') {
+      alert("Terminal Session Unauthenticated. Redirecting to access gateway...");
+      window.location.href = 'https://railway.app';
+    }
+
     let peer = '';
     let isGroup = false;
     let streamInstance = null;
@@ -94,6 +103,8 @@
     
     document.getElementById('nameTag').innerText = `🚀 ${me}`;
     socket.emit('join', me);
+
+
 
     loadDashboardData();
 
