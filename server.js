@@ -18,6 +18,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public')); 
 
+// Global memory dictionary tracking connected users for status dots
+let onlineUsers = new Map(); 
+
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
@@ -195,7 +198,7 @@ app.post('/api/friends/delete', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 DATABASE GROUP CREATION ROUTE
+// DATABASE GROUP CREATION ROUTE
 app.post('/api/groups/create', async (req, res) => {
   try {
     const { name, creator } = req.body;
@@ -210,7 +213,7 @@ app.post('/api/groups/create', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 REAL-TIME FIXED GROUP INVITATION PIPELINE
+// GROUP INVITATION PIPELINE
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
@@ -232,7 +235,7 @@ app.post('/api/groups/invite', async (req, res) => {
     targetUser.groupRequests.push({ groupId, groupName: group.name, invitedBy: creatorUsername });
     await targetUser.save();
 
-// 🚀 FIXED: Instantly pushes the invitation array straight onto the friend's dashboard layout live
+    // 🚀 FIXED: Instantly pushes the invitation array straight onto the friend's dashboard layout live
     const formatChannels = (targetUser.friends || []).map(fName => ({ name: fName, isGroup: false }));
     io.to(targetUsername).emit('dashboard_sync', {
       username: targetUser.username,
@@ -262,7 +265,6 @@ app.post('/api/groups/accept', async (req, res) => {
       await group.save();
     }
 
-    // Force an instant room layout re-fetch for everyone currently looking at the member list
     io.to(groupId).emit('incoming_group_request'); 
 
     res.json({ success: true, groupName: group.name, groupId: group.groupId });
@@ -348,7 +350,18 @@ io.on('connection', (socket) => {
 
   socket.on('join', (roomOrUser) => {
     socket.join(roomOrUser);
+    
+    // 🟢 PRESENCE: Track when actual users connect (ignore group channels)
+    if (!roomOrUser.startsWith('group_')) {
+      onlineUsers.set(roomOrUser, socket.id);
+      io.emit('online_status_sync', Array.from(onlineUsers.keys()));
+    }
     console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
+  });
+
+  // 🟢 PRESENCE: Explicit user request to sync user list on dashboard mount
+  socket.on('request_online_sync', () => {
+    socket.emit('online_status_sync', Array.from(onlineUsers.keys()));
   });
 
   socket.on('request_dashboard_sync', async (username) => {
@@ -413,6 +426,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    // 🔴 PRESENCE: Find and clean out users when they shut down their tab sessions
+    for (let [user, id] of onlineUsers.entries()) {
+      if (id === socket.id) {
+        onlineUsers.delete(user);
+        io.emit('online_status_sync', Array.from(onlineUsers.keys()));
+        break;
+      }
+    }
     console.log(`Socket disconnected: ${socket.id}`);
   });
 });
