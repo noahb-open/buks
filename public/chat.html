@@ -100,9 +100,14 @@
     let streamInstance = null;
     let typingTimeout;
 
+    // ✨ NEW GLOBAL INITIALIZERS: Hold network presence mappings and unread arrays
+    let globalOnlineUsers = [];
+    let unreadChannels = {}; 
+
     document.getElementById('nameTag').innerText = `🚀 ${me}`;
     
     socket.emit('join', me);
+    socket.emit('request_online_sync'); // Query global status list on launch
     loadDashboardData();
 
     function handleKeyPress(event) {
@@ -155,15 +160,36 @@
       }
     }
 
+    // ✨ UPDATED: Injects green live dots and tracks unread status crimson flaring rules
     function appendFriendDOM(name) {
       const box = document.getElementById('friendsBox');
       const div = document.createElement('div');
+      
+      const isUnread = unreadChannels[name] === true && peer !== name;
       div.className = `friend-item ${peer === name && !isGroup ? 'active' : ''}`;
+      if (isUnread) div.style.background = '#d90429'; 
       div.setAttribute('data-id', name);
+      
+      const leftContainer = document.createElement('div');
+      leftContainer.style.display = 'flex';
+      leftContainer.style.alignItems = 'center';
+      leftContainer.style.gap = '8px';
+
+      const isOnline = globalOnlineUsers.includes(name);
+      const dot = document.createElement('span');
+      dot.style.width = '10px';
+      dot.style.height = '10px';
+      dot.style.borderRadius = '50%';
+      dot.style.display = 'inline-block';
+      dot.style.background = isOnline ? '#38b000' : '#5c677d';
+      dot.style.boxShadow = isOnline ? '0 0 8px #38b000' : 'none';
       
       const span = document.createElement('span');
       span.innerText = `👤 ${name}`;
-      div.appendChild(span);
+      
+      leftContainer.appendChild(dot);
+      leftContainer.appendChild(span);
+      div.appendChild(leftContainer);
 
       div.onclick = () => selectTargetChannel(name, false);
 
@@ -178,281 +204,294 @@
       if (box) box.appendChild(div);
     }
 
-    function appendGroupDOM(groupId) {
-      const box = document.getElementById('friendsBox');
-      const d = document.createElement('div');
-      d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
-      d.setAttribute('data-id', groupId);
-      d.style.borderLeft = "4px solid #6a0dad";
-      
-      const displayLabel = groupId.replace('group_', '').toUpperCase();
-      d.innerHTML = `
-        <span>👥 ${displayLabel}</span> 
-        <div>
-          <button class="accept-btn" style="background:#6a0dad; color:white; padding:4px 8px; font-size:12px; border-radius:3px; margin-right:5px;" onclick="inviteToGroup(event, '${groupId}')">Invite</button>
-          <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>
-        </div>
-      `;
-      d.onclick = () => { selectTargetChannel(groupId, true); };
-      if (box) box.appendChild(d);
-      socket.emit('join', groupId);
-    }
+// ✨ UPDATED: Tracks unread styling rules for group tabs
+function appendGroupDOM(groupId) {
+  const box = document.getElementById('friendsBox');
+  const d = document.createElement('div');
+  
+  // Flash bright red if the room has background messages waiting
+  const isGroupUnread = unreadChannels[groupId] === true && peer !== groupId;
+  d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
+  d.setAttribute('data-id', groupId);
+  
+  if (isGroupUnread) {
+    d.style.background = '#d90429';
+  } else {
+    d.style.borderLeft = "4px solid #6a0dad";
+  }
+  
+  const displayLabel = groupId.replace('group_', '').toUpperCase();
+  d.innerHTML = `
+    <span>👥 ${displayLabel}</span> 
+    <div>
+      <button class="accept-btn" style="background:#6a0dad; color:white; padding:4px 8px; font-size:12px; border-radius:3px; margin-right:5px;" onclick="inviteToGroup(event, '${groupId}')">Invite</button>
+      <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>
+    </div>
+  `;
+  d.onclick = () => { selectTargetChannel(groupId, true); };
+  if (box) box.appendChild(d);
+  socket.emit('join', groupId);
+}
 
-    function removeGroupLocal(event, groupId) {
-      event.stopPropagation();
-      let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      localGroups = localGroups.filter(g => g !== groupId);
-      localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-      if (peer === groupId) { 
-        peer = ''; 
-        document.getElementById('target').innerText = 'No active chat'; 
-        document.getElementById('rosterBar').innerText = '';
-        document.getElementById('window').innerHTML = ''; 
+function removeGroupLocal(event, groupId) {
+  event.stopPropagation();
+  let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
+  localGroups = localGroups.filter(g => g !== groupId);
+  localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
+  if (peer === groupId) { 
+    peer = ''; 
+    document.getElementById('target').innerText = 'No active chat'; 
+    document.getElementById('rosterBar').innerText = '';
+    document.getElementById('window').innerHTML = ''; 
+  }
+  loadDashboardData();
+}
+
+async function inviteToGroup(event, groupId) {
+  event.stopPropagation(); 
+  const targetUser = prompt("Enter username to invite to this group chat:");
+  if (!targetUser) return;
+  try {
+    const res = await fetch('/api/groups/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId, creatorUsername: me, targetUsername: targetUser })
+    });
+    const data = await res.json();
+    if (res.ok) alert("Invitation sent successfully! Staged for user confirmation.");
+    else alert(data.error || "Invite rejected.");
+  } catch(err) { console.error("Group invitation pipe issue:", err); }
+}
+
+function appendGroupInviteDOM(req) {
+  const d = document.createElement('div');
+  d.className = 'req-item';
+  d.innerHTML = `
+    <span style="font-size:12px;">👥 ${req.groupName.toUpperCase()} <i style="opacity:0.6;">by ${req.invitedBy}</i></span>
+    <div>
+      <button class="accept-btn" onclick="acceptGroupInvite('${req.groupId}')">✓</button>
+      <button class="decline-btn" onclick="declineGroupInvite('${req.groupId}')">✗</button>
+    </div>
+  `;
+  document.getElementById('groupInvitesBox').appendChild(d);
+}
+
+async function acceptGroupInvite(groupId) {
+  try {
+    const res = await fetch('/api/groups/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ myUsername: me, groupId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
+      if (!localGroups.includes(data.groupId)) {
+        localGroups.push(data.groupId);
+        localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
       }
       loadDashboardData();
     }
+  } catch (err) { console.error(err); }
+}
 
-    async function inviteToGroup(event, groupId) {
-      event.stopPropagation(); 
-      const targetUser = prompt("Enter username to invite to this group chat:");
-      if (!targetUser) return;
-      try {
-        const res = await fetch('/api/groups/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ groupId, creatorUsername: me, targetUsername: targetUser })
-        });
-        const data = await res.json();
-        if (res.ok) alert("Invitation sent successfully! Staged for user confirmation.");
-        else alert(data.error || "Invite rejected.");
-      } catch(err) { console.error("Group invitation pipe issue:", err); }
-    }
+async function declineGroupInvite(groupId) {
+  try {
+    const res = await fetch('/api/groups/decline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ myUsername: me, groupId })
+    });
+    if (res.ok) loadDashboardData();
+  } catch (err) { console.error(err); }
+}
 
-    function appendGroupInviteDOM(req) {
-      const d = document.createElement('div');
-      d.className = 'req-item';
-      d.innerHTML = `
-        <span style="font-size:12px;">👥 ${req.groupName.toUpperCase()} <i style="opacity:0.6;">by ${req.invitedBy}</i></span>
-        <div>
-          <button class="accept-btn" onclick="acceptGroupInvite('${req.groupId}')">✓</button>
-          <button class="decline-btn" onclick="declineGroupInvite('${req.groupId}')">✗</button>
-        </div>
-      `;
-      document.getElementById('groupInvitesBox').appendChild(d);
-    }
+function appendRequestDOM(name) {
+  const d = document.createElement('div');
+  d.className = 'req-item';
+  d.innerHTML = `<span>${name}</span><div><button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button><button class="decline-btn" onclick="declineRequest('${name}')">Decline</button></div>`;
+  document.getElementById('requestsBox').appendChild(d);
+}
 
-    async function acceptGroupInvite(groupId) {
-      try {
-        const res = await fetch('/api/groups/accept', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, groupId })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-          if (!localGroups.includes(data.groupId)) {
-            localGroups.push(data.groupId);
-            localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-          }
-          loadDashboardData();
-        }
-      } catch (err) { console.error(err); }
-    }
+async function selectTargetChannel(name, isGroupRoom) {
+  peer = name;
+  isGroup = isGroupRoom;
+  
+  // ✅ WIPE ACTIVE CHANNEL UNREAD MARKERS OUT IMMEDIATELY ON SELECTION
+  unreadChannels[name] = false;
 
-    async function declineGroupInvite(groupId) {
-      try {
-        const res = await fetch('/api/groups/decline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, groupId })
-        });
-        if (res.ok) loadDashboardData();
-      } catch (err) { console.error(err); }
-    }
+  document.getElementById('typingIndicator').style.display = 'none';
+  document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: @${name}`;
+  document.getElementById('window').innerHTML = '';
 
-    function appendRequestDOM(name) {
-      const d = document.createElement('div');
-      d.className = 'req-item';
-      d.innerHTML = `<span>${name}</span><div><button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button><button class="decline-btn" onclick="declineRequest('${name}')">Decline</button></div>`;
-      document.getElementById('requestsBox').appendChild(d);
-    }
-
-    async function selectTargetChannel(name, isGroupRoom) {
-      peer = name;
-      isGroup = isGroupRoom;
-      document.getElementById('typingIndicator').style.display = 'none';
-      document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: @${name}`;
-      document.getElementById('window').innerHTML = '';
-
-      const rosterContainer = document.getElementById('rosterBar');
-      if (isGroup) {
-        rosterContainer.innerText = "Fetching member network roster...";
-        try {
-          const rRes = await fetch(`/api/groups/members/${name}`);
-          if (rRes.ok) {
-            const rData = await rRes.json();
-            rosterContainer.innerText = `Members: ${rData.members.join(', ')}`;
-          }
-        } catch (err) { rosterContainer.innerText = ""; }
-      } else {
-        rosterContainer.innerText = "";
+  const rosterContainer = document.getElementById('rosterBar');
+  if (isGroup) {
+    rosterContainer.innerText = "Fetching member network roster...";
+    try {
+      const rRes = await fetch(`/api/groups/members/${name}`);
+      if (rRes.ok) {
+        const rData = await rRes.json();
+        rosterContainer.innerText = `Members: ${rData.members.join(', ')}`;
       }
+    } catch (err) { rosterContainer.innerText = ""; }
+  } else {
+    rosterContainer.innerText = "";
+  }
 
-      document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
-      const activeEl = document.querySelector(`.friend-item[data-id="${name}"]`);
-      if (activeEl) activeEl.classList.add('active');
+  document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
+  const activeEl = document.querySelector(`.friend-item[data-id="${name}"]`);
+  if (activeEl) activeEl.classList.add('active');
 
-      try {
-        const res = await fetch(`/api/messages/${me}/${name}`);
-        if (res.ok) {
-          const messages = await res.json();
-          messages.forEach(msg => {
-            const side = msg.sender === me ? 'right' : 'left';
-            show(msg.message, side, msg.fileData, msg.fileType, msg.fileName, msg.sender);
-          });
-        }
-      } catch (err) { console.error(err); }
-    }
-
-    function show(messageText, side, fileData, fileType, fileName, senderName) {
-      const win = document.getElementById('window');
-      const div = document.createElement('div');
-      
-      div.className = `msg-wrapper ${side === 'right' ? 'msg-me' : 'msg-peer'}`;
-      
-      const meta = document.createElement('div');
-      meta.className = 'msg-meta';
-      meta.innerText = senderName || '';
-      div.appendChild(meta);
-
-      if (messageText) {
-        const txt = document.createElement('span');
-        txt.innerText = messageText;
-        div.appendChild(txt);
-      }
-
-      if (fileData) {
-        if (fileType && fileType.startsWith('image/')) {
-          const img = document.createElement('img');
-          img.src = fileData;
-          img.className = 'chat-img';
-          div.appendChild(img);
-        } else if (fileType && fileType.startsWith('video/')) {
-          const vid = document.createElement('video');
-          vid.src = fileData;
-          vid.className = 'chat-video';
-          vid.controls = true;
-          div.appendChild(vid);
-        } else {
-          const link = document.createElement('a');
-          link.href = fileData;
-          link.download = fileName || 'attachment';
-          link.className = 'file-link';
-          link.innerText = `📁 Download ${fileName || 'Attachment'}`;
-          div.appendChild(link);
-        }
-      }
-
-      if (win) {
-        win.appendChild(div);
-        win.scrollTop = win.scrollHeight;
-      }
-    }
-
-    function handleFileUpload(input) {
-      if (!peer) return alert("Select a chat channel first!");
-      const file = input.files;
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const fileData = event.target.result; 
-        socket.emit('private_message', {
-          sender: me,
-          receiver: peer,
-          message: "",
-          fileData: fileData,
-          fileType: file.type,
-          fileName: file.name,
-          isGroupChat: isGroup
-        });
-        input.value = ""; 
-      };
-      reader.readAsDataURL(file);
-    }
-
-    async function openCamera() {
-      if (!peer) return alert("Select a chat channel first!");
-      try {
-        document.getElementById('cameraModal').style.display = 'block';
-        streamInstance = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        document.getElementById('videoFeed').srcObject = streamInstance;
-      } catch (err) {
-        alert("Could not access camera. Ensure permissions are allowed.");
-        closeCamera();
-      }
-    }
-
-    function closeCamera() {
-      document.getElementById('cameraModal').style.display = 'none';
-      if (streamInstance) streamInstance.getTracks().forEach(track => track.stop());
-    }
-
-    function capturePhoto() {
-      const video = document.getElementById('videoFeed');
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1); 
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const fileData = canvas.toDataURL('image/jpeg'); 
-      
-      socket.emit('private_message', {
-        sender: me,
-        receiver: peer,
-        message: "",
-        fileData: fileData,
-        fileType: 'image/jpeg',
-        fileName: `snapshot_${Date.now()}.jpg`,
-        isGroupChat: isGroup
+  try {
+    const res = await fetch(`/api/messages/${me}/${name}`);
+    if (res.ok) {
+      const messages = await res.json();
+      messages.forEach(msg => {
+        const side = msg.sender === me ? 'right' : 'left';
+        show(msg.message, side, msg.fileData, msg.fileType, msg.fileName, msg.sender);
       });
-      closeCamera();
     }
+  } catch (err) { console.error(err); }
+}
 
-    function send() {
-      const txt = document.getElementById('msg').value.trim();
-      if (!txt || !peer) return;
-      socket.emit('private_message', { sender: me, receiver: peer, message: txt, isGroupChat: isGroup });
-      document.getElementById('msg').value = '';
-      socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
+function show(messageText, side, fileData, fileType, fileName, senderName) {
+  const win = document.getElementById('window');
+  const div = document.createElement('div');
+  
+  div.className = `msg-wrapper ${side === 'right' ? 'msg-me' : 'msg-peer'}`;
+  
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.innerText = senderName || '';
+  div.appendChild(meta);
+
+  if (messageText) {
+    const txt = document.createElement('span');
+    txt.innerText = messageText;
+    div.appendChild(txt);
+  }
+
+  if (fileData) {
+    if (fileType && fileType.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = fileData;
+      img.className = 'chat-img';
+      div.appendChild(img);
+    } else if (fileType && fileType.startsWith('video/')) {
+      const vid = document.createElement('video');
+      vid.src = fileData;
+      vid.className = 'chat-video';
+      vid.controls = true;
+      div.appendChild(vid);
+    } else {
+      const link = document.createElement('a');
+      link.href = fileData;
+      link.download = fileName || 'attachment';
+      link.className = 'file-link';
+      link.innerText = `📁 Download ${fileName || 'Attachment'}`;
+      div.appendChild(link);
     }
+  }
 
-    async function wipe() {
-      if (!peer || !confirm("Wipe chat database for this channel?")) return;
-      try {
-        const res = await fetch('/api/messages/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sender: me, receiver: peer })
-        });
-        if (res.ok) {
-          socket.emit('trigger_wipe', { sender: me, receiver: peer, isGroupChat: isGroup });
-        }
-      } catch (err) { console.error(err); }
+  if (win) {
+    win.appendChild(div);
+    win.scrollTop = win.scrollHeight;
+  }
+}
+
+function handleFileUpload(input) {
+  if (!peer) return alert("Select a chat channel first!");
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const fileData = event.target.result; 
+    socket.emit('private_message', {
+      sender: me,
+      receiver: peer,
+      message: "",
+      fileData: fileData,
+      fileType: file.type,
+      fileName: file.name,
+      isGroupChat: isGroup
+    });
+    input.value = ""; 
+  };
+  reader.readAsDataURL(file);
+}
+
+async function openCamera() {
+  if (!peer) return alert("Select a chat channel first!");
+  try {
+    document.getElementById('cameraModal').style.display = 'block';
+    streamInstance = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    document.getElementById('videoFeed').srcObject = streamInstance;
+  } catch (err) {
+    alert("Could not access camera. Ensure permissions are allowed.");
+    closeCamera();
+  }
+}
+
+function closeCamera() {
+  document.getElementById('cameraModal').style.display = 'none';
+  if (streamInstance) streamInstance.getTracks().forEach(track => track.stop());
+}
+
+function capturePhoto() {
+  const video = document.getElementById('videoFeed');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1); 
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const fileData = canvas.toDataURL('image/jpeg'); 
+  
+  socket.emit('private_message', {
+    sender: me,
+    receiver: peer,
+    message: "",
+    fileData: fileData,
+    fileType: 'image/jpeg',
+    fileName: `snapshot_${Date.now()}.jpg`,
+    isGroupChat: isGroup
+  });
+  closeCamera();
+}
+
+function send() {
+  const txt = document.getElementById('msg').value.trim();
+  if (!txt || !peer) return;
+  socket.emit('private_message', { sender: me, receiver: peer, message: txt, isGroupChat: isGroup });
+  document.getElementById('msg').value = '';
+  socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
+}
+
+async function wipe() {
+  if (!peer || !confirm("Wipe chat database for this channel?")) return;
+  try {
+    const res = await fetch('/api/messages/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: me, receiver: peer })
+    });
+    if (res.ok) {
+      socket.emit('trigger_wipe', { sender: me, receiver: peer, isGroupChat: isGroup });
     }
+  } catch (err) { console.error(err); }
+}
 
-    async function createGroupChat() {
-      const gName = prompt("Enter new Group Chat name:");
-      if (!gName) return;
-      try {
-        const res = await fetch('/api/groups/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: gName, creator: me })
-        });
+async function createGroupChat() {
+  const gName = prompt("Enter new Group Chat name:");
+  if (!gName) return;
+  try {
+    const res = await fetch('/api/groups/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: gName, creator: me })
+    });
         const data = await res.json();
         if (res.ok && data.success) {
           const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
@@ -522,11 +561,21 @@
         return;
       }
 
+      const incomingChannel = data.isGroupChat ? data.receiver : data.sender;
+
       if (isGroup && data.receiver === peer) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
       } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
         show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender); 
+      } else {
+        // 🚨 FLARING SYSTEM: Check background streams to flag unread targets red
+        if (data.sender !== me) {
+          unreadChannels[incomingChannel] = true;
+        }
       }
+      
+      // Paint updates live
+      loadDashboardData();
     });
 
     socket.on('peer_typing', data => {
@@ -554,9 +603,13 @@
       const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
       localGroups.forEach(groupId => {
         const d = document.createElement('div');
+        const isGroupUnread = unreadChannels[groupId] === true && peer !== groupId;
+        
         d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
         d.setAttribute('data-id', groupId);
-        d.style.borderLeft = "4px solid #6a0dad";
+        
+        if (isGroupUnread) d.style.background = '#d90429';
+        else d.style.borderLeft = "4px solid #6a0dad";
         
         const displayLabel = groupId.replace('group_', '').toUpperCase();
         d.innerHTML = `
@@ -572,12 +625,7 @@
 
       // 2. Re-append Direct friends
       data.channels.forEach(ch => {
-        const div = document.createElement('div');
-        div.className = `friend-item ${peer === ch.name && !isGroup ? 'active' : ''}`;
-        div.setAttribute('data-id', ch.name);
-        div.innerHTML = `<span>👤 ${ch.name}</span> <button class="delete-btn" onclick="event.stopPropagation(); deleteFriend('${ch.name}')">Remove</button>`;
-        div.onclick = () => selectTargetChannel(ch.name, false); 
-        if (syncFriendsBox) syncFriendsBox.appendChild(div);
+        appendFriendDOM(ch.name);
       });
 
       // 3. Re-append Request containers
@@ -608,16 +656,23 @@
       }
     });
 
+    socket.on('online_status_sync', (onlineUsersArray) => {
+      globalOnlineUsers = onlineUsersArray;
+      loadDashboardData(); 
+    });
+
     socket.on('incoming_request', () => { loadDashboardData(); });
     socket.on('incoming_group_request', () => { loadDashboardData(); }); 
     socket.on('request_accepted', () => { loadDashboardData(); });
     socket.on('friend_deleted', () => { loadDashboardData(); });
-    
+
     socket.on('chat_wiped', (data) => {
       if ((data.isGroup && peer === data.receiver) || (!data.isGroup && (data.wipedBy === peer || data.receiver === peer))) {
         document.getElementById('window').innerHTML = '';
       }
     });
+
+    socket.emit('request_online_sync');
   </script>
 </body>
 </html>
