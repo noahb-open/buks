@@ -1,13 +1,14 @@
-const mongoose = require('mongoose');
-
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
-  verificationCode: { type: String },
-  friends: { type: [String], default: [] },  
-  requests: { type: [String], default: [] }  
+  friends: { type: [String], default: [] },
+  requests: { type: [String], default: [] },
+  // 👥 CRITICAL: Must be structured exactly like this to hold pending room values
+  groupRequests: [{
+    groupId: String,
+    groupName: String,
+    invitedBy: String
+  }]
 });
-
-module.exports = mongoose.model('User', UserSchema);
