@@ -22,7 +22,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
 
-// Global presence tracker dictionary map tracking online profiles
+// Global presence tracker map for tracking online user profiles
 let onlineUsers = new Map(); 
 
 // 🚀 EMERGENCY AUTO-RESET GATE FOR ADMIN PROFILE
@@ -119,7 +119,7 @@ app.post('/api/friends/request', async (req, res) => {
     targetFriend.requests.push(myUsername);
     await targetFriend.save();
 
-    // Trigger immediate friend sync to receiver
+    // Trigger immediate dashboard update for receiver
     const friendChannels = (targetFriend.friends || []).map(fName => ({ name: fName, isGroup: false }));
     io.to(friendUsername).emit('dashboard_sync', {
       username: targetFriend.username,
@@ -148,7 +148,7 @@ app.post('/api/friends/accept', async (req, res) => {
     await me.save();
     await requester.save();
 
-    // Push live real-time sync updates to BOTH users instantly
+    // Push real-time layout updates to BOTH users instantly
     const myChannels = (me.friends || []).map(fName => ({ name: fName, isGroup: false }));
     io.to(myUsername).emit('dashboard_sync', { username: me.username, channels: myChannels, requests: me.requests || [], groupRequests: me.groupRequests || [] });
 
@@ -187,7 +187,7 @@ app.post('/api/friends/delete', async (req, res) => {
     await me.save();
     await exFriend.save();
 
-    // Trigger instant sidebar wipe for both
+    // Clean sidebar layout elements instantly for both users
     const myChannels = (me.friends || []).map(fName => ({ name: fName, isGroup: false }));
     io.to(myUsername).emit('dashboard_sync', { username: me.username, channels: myChannels, requests: me.requests || [], groupRequests: me.groupRequests || [] });
 
@@ -352,7 +352,7 @@ io.on('connection', (socket) => {
   socket.on('join', (roomOrUser) => {
     socket.join(roomOrUser);
     
-    // Presence engine: if joining room is an independent username node, flag online
+    // 🟢 PRESENCE: Track when actual users connect (ignore group channels)
     if (!roomOrUser.startsWith('group_')) {
       onlineUsers.set(roomOrUser, socket.id);
       io.emit('online_status_sync', Array.from(onlineUsers.keys()));
@@ -360,6 +360,7 @@ io.on('connection', (socket) => {
     console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
   });
 
+  // 🟢 PRESENCE: Explicit user request to sync user list on dashboard mount
   socket.on('request_online_sync', () => {
     socket.emit('online_status_sync', Array.from(onlineUsers.keys()));
   });
@@ -443,7 +444,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // Locate and purge username record out of global presence dictionaries
+    // 🔴 PRESENCE: Find and clean out users when they shut down their tab sessions
     for (let [user, id] of onlineUsers.entries()) {
       if (id === socket.id) {
         onlineUsers.delete(user);
