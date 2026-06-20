@@ -38,7 +38,7 @@ mongoose.connection.once('open', async () => {
       isVerified: true,
       friends: [],
       requests: [],
-      groupRequests: [] // Added schema support layer
+      groupRequests: []
     });
     await freshAdmin.save();
     console.log("SUCCESS: CREATOR_RED node fully rebuilt and encrypted locally! 🛡️");
@@ -116,7 +116,15 @@ app.post('/api/friends/request', async (req, res) => {
     targetFriend.requests.push(myUsername);
     await targetFriend.save();
 
-    io.to(friendUsername).emit('incoming_request', { from: myUsername });
+    // Trigger immediate friend sync to receiver
+    const friendChannels = (targetFriend.friends || []).map(fName => ({ name: fName, isGroup: false }));
+    io.to(friendUsername).emit('dashboard_sync', {
+      username: targetFriend.username,
+      channels: friendChannels,
+      requests: targetFriend.requests || [],
+      groupRequests: targetFriend.groupRequests || []
+    });
+
     res.json({ success: true, message: "Request sent!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -137,7 +145,13 @@ app.post('/api/friends/accept', async (req, res) => {
     await me.save();
     await requester.save();
 
-    io.to(requesterUsername).emit('request_accepted', { by: myUsername });
+    // Push live real-time sync updates to BOTH users instantly
+    const myChannels = (me.friends || []).map(fName => ({ name: fName, isGroup: false }));
+    io.to(myUsername).emit('dashboard_sync', { username: me.username, channels: myChannels, requests: me.requests || [], groupRequests: me.groupRequests || [] });
+
+    const reqChannels = (requester.friends || []).map(fName => ({ name: fName, isGroup: false }));
+    io.to(requesterUsername).emit('dashboard_sync', { username: requester.username, channels: reqChannels, requests: requester.requests || [], groupRequests: requester.groupRequests || [] });
+
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -170,7 +184,13 @@ app.post('/api/friends/delete', async (req, res) => {
     await me.save();
     await exFriend.save();
 
-    io.to(friendUsername).emit('friend_deleted', { by: myUsername });
+    // Trigger instant sidebar wipe for both
+    const myChannels = (me.friends || []).map(fName => ({ name: fName, isGroup: false }));
+    io.to(myUsername).emit('dashboard_sync', { username: me.username, channels: myChannels, requests: me.requests || [], groupRequests: me.groupRequests || [] });
+
+    const exChannels = (exFriend.friends || []).map(fName => ({ name: fName, isGroup: false }));
+    io.to(friendUsername).emit('dashboard_sync', { username: exFriend.username, channels: exChannels, requests: exFriend.requests || [], groupRequests: exFriend.groupRequests || [] });
+
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -190,7 +210,7 @@ app.post('/api/groups/create', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 UPDATED: STAGED INVITE SYSTEM (Pushes to target's pending invites tray)
+// 🚀 REAL-TIME FIXED GROUP INVITATION PIPELINE
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
@@ -206,20 +226,26 @@ app.post('/api/groups/invite', async (req, res) => {
     
     if (!targetUser.groupRequests) targetUser.groupRequests = [];
     
-    // Stop duplicate invite requests
     const alreadyInvited = targetUser.groupRequests.some(req => req.groupId === groupId);
     if (alreadyInvited) return res.status(400).json({ error: "Invite request already pending!" });
 
-    // Stage invitation data object
     targetUser.groupRequests.push({ groupId, groupName: group.name, invitedBy: creatorUsername });
     await targetUser.save();
 
-    io.to(targetUsername).emit('incoming_group_request');
+// 🚀 FIXED: Instantly pushes the invitation array straight onto the friend's dashboard layout live
+    const formatChannels = (targetUser.friends || []).map(fName => ({ name: fName, isGroup: false }));
+    io.to(targetUsername).emit('dashboard_sync', {
+      username: targetUser.username,
+      channels: formatChannels,
+      requests: targetUser.requests || [],
+      groupRequests: targetUser.groupRequests || [] 
+    });
+
     res.json({ success: true, message: "Invitation pending user acceptance!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 NEW: ACCEPT GROUP INVITATION ROUTE
+// ACCEPT GROUP INVITATION ROUTE
 app.post('/api/groups/accept', async (req, res) => {
   try {
     const { myUsername, groupId } = req.body;
@@ -228,26 +254,28 @@ app.post('/api/groups/accept', async (req, res) => {
 
     if (!me || !group) return res.status(404).json({ error: "Records missing." });
 
-    // Strip invite object out of user tray
     me.groupRequests = me.groupRequests.filter(req => req.groupId !== groupId);
     await me.save();
 
-    // Push into active group member database array
     if (!group.members.includes(myUsername)) {
       group.members.push(myUsername);
       await group.save();
     }
 
+    // Force an instant room layout re-fetch for everyone currently looking at the member list
+    io.to(groupId).emit('incoming_group_request'); 
+
     res.json({ success: true, groupName: group.name, groupId: group.groupId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 NEW: DECLINE GROUP INVITATION ROUTE
+// DECLINE GROUP INVITATION ROUTE
 app.post('/api/groups/decline', async (req, res) => {
   try {
     const { myUsername, groupId } = req.body;
     const me = await User.findOne({ username: myUsername });
     if (!me) return res.status(404).json({ error: "User records missing." });
+
     me.groupRequests = me.groupRequests.filter(req => req.groupId !== groupId);
     await me.save();
 
@@ -255,7 +283,7 @@ app.post('/api/groups/decline', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🚀 NEW: FETCH GROUP MEMBER DETAIL LIST
+// FETCH GROUP MEMBER DETAIL LIST
 app.get('/api/groups/members/:groupId', async (req, res) => {
   try {
     const group = await Group.findOne({ groupId: req.params.groupId });
@@ -264,7 +292,7 @@ app.get('/api/groups/members/:groupId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 📊 UPDATED DASHBOARD DATA SYNC ENDPOINT (Delivers staged invitations)
+// DASHBOARD DATA SYNC ENDPOINT
 app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -272,12 +300,12 @@ app.get('/api/friends-data/:username', async (req, res) => {
     res.json({ 
       friends: user.friends || [], 
       requests: user.requests || [],
-      groupRequests: user.groupRequests || [] // Synced payload asset
+      groupRequests: user.groupRequests || [] 
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 📂 CHAT HISTORY RETRIEVAL ENDPOINT
+// CHAT HISTORY RETRIEVAL ENDPOINT
 app.get('/api/messages/:me/:peer', async (req, res) => {
   try {
     const { me, peer } = req.params;
@@ -297,7 +325,7 @@ app.get('/api/messages/:me/:peer', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🧹 WIPING ENGINE DATA OVERWRITE
+// WIPING ENGINE
 app.post('/api/messages/delete', async (req, res) => {
   try {
     const { sender, receiver } = req.body;
@@ -315,7 +343,7 @@ app.post('/api/messages/delete', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 🛰️ REALTIME SOCKET.IO ENGINE MANAGEMENT
+// REALTIME SOCKET.IO ENGINE MANAGEMENT
 io.on('connection', (socket) => {
 
   socket.on('join', (roomOrUser) => {
@@ -340,7 +368,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 🚀 REALTIME MESSAGE PIPELINE
   socket.on('private_message', async (data) => {
     try {
       if (data.receiver === "GLOBAL_BROADCAST" && data.sender.startsWith("CREATOR_RED")) {
@@ -390,6 +417,5 @@ io.on('connection', (socket) => {
   });
 });
 
-// 🌐 ENGINE START-UP CONTROL
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Blue Rocket Server running smoothly on port ${PORT} 🚀`));
