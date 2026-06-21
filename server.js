@@ -5,7 +5,10 @@ const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const path = require('path');
 
+// Database Schema Models
 const User = require('./models/User');
 const Message = require('./models/Message');
 const Group = require('./models/Group'); 
@@ -14,22 +17,66 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
+// Server configuration middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve main client files out of public folder
 app.use(express.static('public')); 
 
+// Database Connection Orchestration
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected 🚀'))
   .catch(err => console.error('DB Error:', err));
 
-// Global presence tracker map for tracking online user profiles
+// Global dynamic presence mapping matrix tracker
 let onlineUsers = new Map(); 
 
-// 🚀 EMERGENCY AUTO-RESET GATE FOR ADMIN PROFILE
+// Configure secure transactional email transport engine
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Helper function to build a unified sidebar channel object payload for client synchronization
+async function getUserChannels(username) {
+  const lowercaseUser = username.toLowerCase();
+  const userRecord = await User.findOne({ username: lowercaseUser });
+  if (!userRecord) return [];
+
+  // 1. Direct messaging channels matching friend list configurations
+  const directChannels = (userRecord.friends || []).map(fName => ({ name: fName, isGroup: false }));
+
+  // 2. Extracted chat channels matching database group memberships
+  const individualGroups = await Group.find({ members: userRecord.username });
+  const groupChannels = individualGroups.map(g => ({ name: g.groupId, isGroup: true }));
+
+  return [...directChannels, ...groupChannels];
+}
+
+// Helper function to broadcast live layout update states over targeted socket channels
+async function pushDashboardSync(username) {
+  const lowercaseName = username.toLowerCase();
+  const user = await User.findOne({ username: lowercaseName });
+  if (!user) return;
+
+  const combinedChannels = await getUserChannels(user.username);
+  io.to(user.username).emit('dashboard_sync', {
+    username: user.username,
+    channels: combinedChannels,
+    requests: user.requests || [],
+    groupRequests: user.groupRequests || []
+  });
+}
+
+// Emergency Admin Setup Hook Node 
 mongoose.connection.once('open', async () => {
   try {
     const adminEmail = "creator@bluerocket.net";
-    const secureHash = await bcrypt.hash("h!vemind12", 10);
+    const secureHash = await bcrypt.hash(process.env.ADMIN_PASSWORD || "h!vemind12", 10);
 
     await User.deleteMany({ username: "CREATOR_RED" });
     await User.deleteMany({ email: adminEmail });
@@ -50,18 +97,74 @@ mongoose.connection.once('open', async () => {
   }
 });
 
-// 1. SIGN UP ROUTE
+// Server-Side Authorization Token Guard Middleware
+function requireAdminAuth(req, res, next) {
+  try {
+    const token = req.headers.authorization?.split(' ') || req.query.token;
+    if (!token) return res.status(401).send('<h1>Access Denied</h1><p>Missing structural session validation token.</p>');
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    User.findById(decoded.id).then(user => {
+      if (user && user.username === "CREATOR_RED") {
+        req.user = user;
+        return next();
+      }
+      return res.status(403).send('<h1>Forbidden</h1><p>Unauthorized platform credentials context.</p>');
+    });
+  } catch (err) {
+    return res.status(401).send('<h1>Session Expired</h1><p>Please log back into your node gateway.</p>');
+  }
+}
+
+// Secure route to serve creator console from outside public web view folder tree
+app.get('/admin/terminal', requireAdminAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'creator.html'));
+});
+
+// 1. SIGN UP ROUTE WITH REAL-TIME EMAIL VERIFICATION CODES
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    const cleanUser = username.trim().toLowerCase();
+    const cleanEmail = email.trim().toLowerCase();
+
+    const existing = await User.findOne({ $or: [{ email: cleanEmail }, { username: cleanUser }] });
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
+    const dynamicTokenCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ username, email, password: hashedPassword, verificationCode: "777999", friends: [], requests: [], groupRequests: [] });
+
+    const newUser = new User({ 
+      username: cleanUser, 
+      email: cleanEmail, 
+      password: hashedPassword, 
+      verificationCode: dynamicTokenCode, 
+      friends: [], 
+      requests: [], 
+      groupRequests: [] 
+    });
     await newUser.save();
 
-    res.status(201).json({ message: 'User created successfully!' });
+    const mailOptions = {
+      from: `"Blue Rocket Core" <${process.env.EMAIL_USER}>`,
+      to: cleanEmail,
+      subject: '🚀 Your Blue Rocket Access Key Token',
+      text: `Your 6-digit registration launch passcode is: ${dynamicTokenCode}.`,
+      html: `
+        <div style="font-family: sans-serif; background: #0d1b2a; color: white; padding: 25px; border-radius: 10px; max-width: 400px; margin: auto;">
+          <h2 style="color: #00b4d8; text-align: center;">Welcome to Blue Rocket 🚀</h2>
+          <div style="background: #1b263b; font-size: 28px; font-weight: bold; color: #38b000; text-align: center; padding: 15px; border-radius: 5px; letter-spacing: 5px; margin: 20px 0;">
+            ${dynamicTokenCode}
+          </div>
+        </div>`
+    };
+
+    transporter.sendMail(mailOptions, (error) => {
+      if (error) console.error("SMTP delivery fault:", error);
+      console.log(`Fallback debug access key token for dev runtime testing [${cleanEmail}]: ${dynamicTokenCode}`);
+    });
+
+    res.status(201).json({ message: 'User verification frame staged.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -69,9 +172,9 @@ app.post('/api/signup', async (req, res) => {
 app.post('/api/verify', async (req, res) => {
   try {
     const { email, code } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
 
-    if (user && (user.verificationCode === code || code === "777999")) {
+    if (user && user.verificationCode === code.trim()) {
       user.isVerified = true;
       user.verificationCode = null; 
       await user.save();
@@ -79,7 +182,7 @@ app.post('/api/verify', async (req, res) => {
       const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
       return res.json({ success: true, token, username: user.username });
     }
-    return res.status(400).json({ success: false, message: 'Invalid verification code.' });
+    return res.status(400).json({ success: false, message: 'Invalid registration code.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -87,10 +190,10 @@ app.post('/api/verify', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     
-    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
-    if (!user.isVerified) return res.status(401).json({ success: false, message: 'Please verify your account first.' });
+    if (!user) return res.status(404).json({ success: false, message: 'User matching credentials not found.' });
+    if (!user.isVerified) return res.status(401).json({ success: false, message: 'Verify account node first.' });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) return res.status(400).json({ success: false, message: 'Wrong credentials.' });
@@ -100,361 +203,293 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. SEND FRIEND REQUEST ROUTE
-app.post('/api/friends/request', async (req, res) => {
+// 4. GET INITIAL DASHBOARD COMPILER LOAD DATA
+app.get('/api/friends-data/:username', async (req, res) => {
   try {
-    const { myUsername, friendUsername } = req.body;
-    if (myUsername === friendUsername) return res.status(400).json({ error: "You cannot add yourself!" });
-
-    const targetFriend = await User.findOne({ username: friendUsername });
-    if (!targetFriend) return res.status(404).json({ error: "User does not exist. Check spelling!" });
-
-    const me = await User.findOne({ username: myUsername });
-    if (!me.friends) me.friends = [];
-    if (!targetFriend.requests) targetFriend.requests = [];
-
-    if (me.friends.includes(friendUsername)) return res.status(400).json({ error: "Already on your friend list!" });
-    if (targetFriend.requests.includes(myUsername)) return res.status(400).json({ error: "Request already pending!" });
-
-    targetFriend.requests.push(myUsername);
-    await targetFriend.save();
-
-    // Trigger immediate dashboard update for receiver
-    const friendChannels = (targetFriend.friends || []).map(fName => ({ name: fName, isGroup: false }));
-    io.to(friendUsername).emit('dashboard_sync', {
-      username: targetFriend.username,
-      channels: friendChannels,
-      requests: targetFriend.requests || [],
-      groupRequests: targetFriend.groupRequests || []
+    const user = await User.findOne({ username: req.params.username.toLowerCase() });
+    if (!user) return res.status(404).json({ error: "User records missing." });
+    
+    res.json({
+      friends: user.friends || [],
+      requests: user.requests || [],
+      groupRequests: user.groupRequests || []
     });
-
-    res.json({ success: true, message: "Request sent!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4B. ACCEPT FRIEND REQUEST ROUTE
+// 5. FETCH RE-ARCHITECTED MESSAGE HISTORIES
+app.get('/api/messages/:me/:peer', async (req, res) => {
+  try {
+    const { me, peer } = req.params;
+    let query;
+
+    if (peer.startsWith('group_')) {
+      query = { receiver: peer, isGroupChat: true };
+    } else {
+      query = {
+        $or: [
+          { sender: me.toLowerCase(), receiver: peer.toLowerCase(), isGroupChat: false },
+          { sender: peer.toLowerCase(), receiver: me.toLowerCase(), isGroupChat: false }
+        ]
+      };
+    }
+
+    const logs = await Message.find(query).sort({ createdAt: 1 }).limit(150);
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 6. FRIEND REQUEST ACTIONS
+app.post('/api/friends/request', async (req, res) => {
+  try {
+    const { myUsername, friendUsername } = req.body;
+    const sender = myUsername.toLowerCase();
+    const receiver = friendUsername.toLowerCase();
+
+    if (sender === receiver) return res.status(400).json({ error: "Cannot add yourself." });
+
+    const target = await User.findOne({ username: receiver });
+    if (!target) return res.status(404).json({ error: "Target profile node does not exist." });
+
+    const me = await User.findOne({ username: sender });
+    if (me.friends.includes(receiver)) return res.status(400).json({ error: "Already friends." });
+    if (target.requests.includes(sender)) return res.status(400).json({ error: "Request already processing." });
+
+    target.requests.push(sender);
+    await target.save();
+
+    await pushDashboardSync(target.username);
+    res.json({ success: true, message: "Request mapped successfully." });
+} catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/friends/accept', async (req, res) => {
   try {
     const { myUsername, requesterUsername } = req.body;
-    const me = await User.findOne({ username: myUsername });
-    const requester = await User.findOne({ username: requesterUsername });
+    const userMe = myUsername.toLowerCase();
+    const userReq = requesterUsername.toLowerCase();
 
-    if (!me || !requester) return res.status(404).json({ error: "User records not found." });
+    const me = await User.findOne({ username: userMe });
+    const requester = await User.findOne({ username: userReq });
 
-    me.requests = me.requests.filter(name => name !== requesterUsername);
-    if (!me.friends.includes(requesterUsername)) me.friends.push(requesterUsername);
-    if (!requester.friends.includes(myUsername)) requester.friends.push(myUsername);
+    if (!me || !requester) return res.status(404).json({ error: "Data frames disconnected." });
+
+    me.requests = me.requests.filter(name => name !== userReq);
+    if (!me.friends.includes(userReq)) me.friends.push(userReq);
+    if (!requester.friends.includes(userMe)) requester.friends.push(userMe);
 
     await me.save();
     await requester.save();
 
-    // Push real-time layout updates to BOTH users instantly
-    const myChannels = (me.friends || []).map(fName => ({ name: fName, isGroup: false }));
-    io.to(myUsername).emit('dashboard_sync', { username: me.username, channels: myChannels, requests: me.requests || [], groupRequests: me.groupRequests || [] });
-
-    const reqChannels = (requester.friends || []).map(fName => ({ name: fName, isGroup: false }));
-    io.to(requesterUsername).emit('dashboard_sync', { username: requester.username, channels: reqChannels, requests: requester.requests || [], groupRequests: requester.groupRequests || [] });
+    await pushDashboardSync(me.username);
+    await pushDashboardSync(requester.username);
 
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4C. DECLINE FRIEND REQUEST ROUTE
 app.post('/api/friends/decline', async (req, res) => {
   try {
     const { myUsername, requesterUsername } = req.body;
-    const me = await User.findOne({ username: myUsername });
-    if (!me) return res.status(404).json({ error: "User not found." });
+    const me = await User.findOne({ username: myUsername.toLowerCase() });
+    if (!me) return res.status(404).json({ error: "User records missing." });
 
-    me.requests = me.requests.filter(name => name !== requesterUsername);
+    me.requests = me.requests.filter(name => name !== requesterUsername.toLowerCase());
     await me.save();
+
+    await pushDashboardSync(me.username);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4D. DELETE FRIEND ROUTE
 app.post('/api/friends/delete', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
-    const me = await User.findOne({ username: myUsername });
-    const exFriend = await User.findOne({ username: friendUsername });
+    const userMe = myUsername.toLowerCase();
+    const userEx = friendUsername.toLowerCase();
 
-    if (!me || !exFriend) return res.status(404).json({ error: "User records not found." });
+    const me = await User.findOne({ username: userMe });
+    const exFriend = await User.findOne({ username: userEx });
 
-    me.friends = me.friends.filter(name => name !== friendUsername);
-    exFriend.friends = exFriend.friends.filter(name => name !== myUsername);
+    if (!me || !exFriend) return res.status(404).json({ error: "Profiles missing." });
+
+    me.friends = me.friends.filter(name => name !== userEx);
+    exFriend.friends = exFriend.friends.filter(name => name !== userMe);
 
     await me.save();
     await exFriend.save();
 
-    // Clean sidebar layout elements instantly for both users
-    const myChannels = (me.friends || []).map(fName => ({ name: fName, isGroup: false }));
-    io.to(myUsername).emit('dashboard_sync', { username: me.username, channels: myChannels, requests: me.requests || [], groupRequests: me.groupRequests || [] });
-
-    const exChannels = (exFriend.friends || []).map(fName => ({ name: fName, isGroup: false }));
-    io.to(friendUsername).emit('dashboard_sync', { username: exFriend.username, channels: exChannels, requests: exFriend.requests || [], groupRequests: exFriend.groupRequests || [] });
+    await pushDashboardSync(me.username);
+    await pushDashboardSync(exFriend.username);
 
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DATABASE GROUP CREATION ROUTE
+// 7. REAL-TIME CHAT GROUP AGGREGATIONS
 app.post('/api/groups/create', async (req, res) => {
   try {
     const { name, creator } = req.body;
-    if (!name || !creator) return res.status(400).json({ error: "Missing name or creator fields." });
+    const cleanCreator = creator.toLowerCase();
+    if (!name || !creator) return res.status(400).json({ error: "Parameters truncated." });
 
     const groupId = 'group_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString().slice(-4);
-    
-    const newGroup = new Group({ name, groupId, creator, members: [creator] });
+    const newGroup = new Group({ name, groupId, creator: cleanCreator, members: [cleanCreator], invites: [] });
     await newGroup.save();
-    
+
+    await pushDashboardSync(cleanCreator);
     res.status(201).json({ success: true, group: newGroup });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// REAL-TIME FIXED GROUP INVITATION PIPELINE
 app.post('/api/groups/invite', async (req, res) => {
   try {
     const { groupId, creatorUsername, targetUsername } = req.body;
+    const cleanTarget = targetUsername.toLowerCase();
+
     const group = await Group.findOne({ groupId });
-    
-    if (!group) return res.status(404).json({ error: "Group not found." });
-    if (group.creator !== creatorUsername) return res.status(403).json({ error: "🔒 Access Denied: Only the creator can invite!" });
+    if (!group) return res.status(404).json({ error: "Room not found." });
+    if (group.creator !== creatorUsername.toLowerCase()) return res.status(403).json({ error: "Creator scope constraint violation." });
 
-    const targetUser = await User.findOne({ username: targetUsername });
-    if (!targetUser) return res.status(404).json({ error: "User does not exist." });
+    const targetUser = await User.findOne({ username: cleanTarget });
+    if (!targetUser) return res.status(404).json({ error: "Target node unknown." });
 
-    if (group.members.includes(targetUsername)) return res.status(400).json({ error: "User is already a member!" });
-    
-    if (!targetUser.groupRequests) targetUser.groupRequests = [];
-    
-    const alreadyInvited = targetUser.groupRequests.some(req => req.groupId === groupId);
-    if (alreadyInvited) return res.status(400).json({ error: "Invite request already pending!" });
+    if (group.members.includes(cleanTarget)) return res.status(400).json({ error: "User active inside channel." });
+    if (group.invites.includes(cleanTarget)) return res.status(400).json({ error: "Invite sequence already processing." });
 
-    targetUser.groupRequests.push({ groupId, groupName: group.name, invitedBy: creatorUsername });
-    await targetUser.save();
-
-    // 🚀 FIXED: Instantly pushes the invitation array straight onto the friend's dashboard layout live
-    const formatChannels = (targetUser.friends || []).map(fName => ({ name: fName, isGroup: false }));
-    io.to(targetUsername).emit('dashboard_sync', {
-      username: targetUser.username,
-      channels: formatChannels,
-      requests: targetUser.requests || [],
-      groupRequests: targetUser.groupRequests || [] 
+    await Group.updateOne({ groupId }, { $addToSet: { invites: cleanTarget } });
+    await User.updateOne({ username: cleanTarget }, { 
+      $addToSet: { groupRequests: { groupId, groupName: group.name, invitedBy: creatorUsername.toLowerCase() } } 
     });
 
+    await pushDashboardSync(cleanTarget);
     res.json({ success: true, message: "Invitation pending user acceptance!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ACCEPT GROUP INVITATION ROUTE
 app.post('/api/groups/accept', async (req, res) => {
   try {
     const { myUsername, groupId } = req.body;
-    const me = await User.findOne({ username: myUsername });
+    const cleanUser = myUsername.toLowerCase();
+
     const group = await Group.findOne({ groupId });
+    if (!group) return res.status(404).json({ error: "Group missing." });
 
-    if (!me || !group) return res.status(404).json({ error: "Records missing." });
+    await User.updateOne({ username: cleanUser }, { $pull: { groupRequests: { groupId } } });
+    await Group.updateOne({ groupId }, { $pull: { invites: cleanUser }, $addToSet: { members: cleanUser } });
 
-    me.groupRequests = me.groupRequests.filter(req => req.groupId !== groupId);
-    await me.save();
-
-    if (!group.members.includes(myUsername)) {
-      group.members.push(myUsername);
-      await group.save();
-    }
-
-    // Force an instant room layout re-fetch for everyone currently looking at the member list
     io.to(groupId).emit('incoming_group_request'); 
+    await pushDashboardSync(cleanUser);
 
     res.json({ success: true, groupName: group.name, groupId: group.groupId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DECLINE GROUP INVITATION ROUTE
 app.post('/api/groups/decline', async (req, res) => {
   try {
     const { myUsername, groupId } = req.body;
-    const me = await User.findOne({ username: myUsername });
-    if (!me) return res.status(404).json({ error: "User records missing." });
+    const cleanUser = myUsername.toLowerCase();
 
-    me.groupRequests = me.groupRequests.filter(req => req.groupId !== groupId);
-    await me.save();
+    await User.updateOne({ username: cleanUser }, { $pull: { groupRequests: { groupId } } });
+    await Group.updateOne({ groupId }, { $pull: { invites: cleanUser } });
 
+    await pushDashboardSync(cleanUser);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// FETCH GROUP MEMBER DETAIL LIST
 app.get('/api/groups/members/:groupId', async (req, res) => {
   try {
     const group = await Group.findOne({ groupId: req.params.groupId });
-    if (!group) return res.status(404).json({ error: "Group missing" });
-    res.json({ members: group.members || [] });
+    if (!group) return res.status(404).json({ error: "Room missing." });
+    res.json({ members: group.members });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DASHBOARD DATA SYNC ENDPOINT
-app.get('/api/friends-data/:username', async (req, res) => {
-  try {
-    const user = await User.findOne({ username: req.params.username });
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json({ 
-      friends: user.friends || [], 
-      requests: user.requests || [],
-      groupRequests: user.groupRequests || [] 
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
-// CHAT HISTORY RETRIEVAL ENDPOINT
-app.get('/api/messages/:me/:peer', async (req, res) => {
-  try {
-    const { me, peer } = req.params;
-    let messages;
-    
-    if (peer.startsWith('group_')) {
-      messages = await Message.find({ receiver: peer }).sort({ createdAt: 1 });
-    } else {
-      messages = await Message.find({
-        $or: [
-          { sender: me, receiver: peer },
-          { sender: peer, receiver: me }
-        ]
-      }).sort({ createdAt: 1 });
-    }
-    res.json(messages);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// WIPING ENGINE
-app.post('/api/messages/delete', async (req, res) => {
-  try {
-    const { sender, receiver } = req.body;
-    if (receiver.startsWith('group_')) {
-      await Message.deleteMany({ receiver });
-    } else {
-      await Message.deleteMany({
-        $or: [
-          { sender, receiver },
-          { sender: receiver, receiver: sender }
-        ]
-      });
-    }
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// REALTIME SOCKET.IO ENGINE MANAGEMENT
+// 8. REAL-TIME WEBSOCKET MESH WORKSPACE LISTENERS
 io.on('connection', (socket) => {
+  let boundSessionUser = null;
 
-  socket.on('join', (roomOrUser) => {
-    socket.join(roomOrUser);
+  socket.on('join', async (username) => {
+    if (!username) return;
+    boundSessionUser = username.toLowerCase();
     
-    // 🟢 PRESENCE: Track when actual users connect (ignore group channels)
-    if (!roomOrUser.startsWith('group_')) {
-      onlineUsers.set(roomOrUser, socket.id);
-      io.emit('online_status_sync', Array.from(onlineUsers.keys()));
-    }
-    console.log(`Socket [${socket.id}] entered routing room: ${roomOrUser}`);
+    onlineUsers.set(boundSessionUser, socket.id);
+    socket.join(boundSessionUser);
+    
+    const connectedGroupMatrix = await Group.find({ members: boundSessionUser });
+    connectedGroupMatrix.forEach(g => socket.join(g.groupId));
+
+    io.emit('online_status_sync', Array.from(onlineUsers.keys()));
+    await pushDashboardSync(boundSessionUser);
   });
 
-  // 🟢 PRESENCE: Explicit user request to sync user list on dashboard mount
   socket.on('request_online_sync', () => {
     socket.emit('online_status_sync', Array.from(onlineUsers.keys()));
   });
 
-  socket.on('request_dashboard_sync', async (username) => {
-    try {
-      const user = await User.findOne({ username: username });
-      if (user) {
-        const formatChannels = (user.friends || []).map(fName => ({ name: fName, isGroup: false }));
-        socket.emit('dashboard_sync', {
-          username: user.username,
-          channels: formatChannels,
-          requests: user.requests || [],
-          groupRequests: user.groupRequests || []
-        });
-      }
-    } catch (err) {
-      console.error("Dashboard database sync warning:", err);
+  socket.on('typing_status', (data) => {
+    if (data.receiver.startsWith('group_')) {
+      socket.to(data.receiver).emit('typing_status', data);
+    } else {
+      const targetSocketId = onlineUsers.get(data.receiver.toLowerCase());
+      if (targetSocketId) io.to(targetSocketId).emit('typing_status', data);
     }
   });
 
-  socket.on('private_message', async (data) => {
+  socket.on('private_message', async (payload) => {
     try {
-      if (data.receiver === "GLOBAL_BROADCAST" && data.sender.startsWith("CREATOR_RED")) {
-        io.emit('new_message', {
-          sender: "CREATOR_RED (ADMIN)",
-          receiver: "GLOBAL_BROADCAST",
-          message: data.message,
+      const author = payload.sender.toLowerCase();
+      const destination = payload.receiver.trim();
+
+      if (destination === "GLOBAL_BROADCAST" && author === "creator_red") {
+        const broadcastMsg = new Message({
+          sender: "SYSTEM_ALERT",
+          receiver: "ALL",
+          message: payload.message,
+          isGroupChat: false
+        });
+        await broadcastMsg.save();
+        
+        io.emit('private_message', {
+          sender: "SYSTEM_ALERT",
+          receiver: "ALL",
+          message: payload.message,
           fileData: null,
-          fileType: null,
-          fileName: null
+          isGroupChat: false
         });
         return;
       }
 
-      const newMessage = new Message({
-        sender: data.sender,
-        receiver: data.receiver,
-        message: data.message || "",
-        fileData: data.fileData || null,
-        fileType: data.fileType || null,
-        fileName: data.fileName || null,
-        isGroupChat: data.isGroupChat || false
+      const msgNode = new Message({
+        sender: author,
+        receiver: payload.isGroupChat ? destination : destination.toLowerCase(),
+        message: payload.message,
+        fileData: payload.fileData || null,
+        fileType: payload.fileType || null,
+        fileName: payload.fileName || null,
+        isGroupChat: payload.isGroupChat
       });
-      await newMessage.save();
+      await msgNode.save();
 
-      if (data.isGroupChat) {
-        io.to(data.receiver).emit('new_message', newMessage);
+      if (payload.isGroupChat) {
+        io.to(destination).emit('private_message', msgNode);
       } else {
-        io.to(data.receiver).emit('new_message', newMessage);
-        io.to(data.sender).emit('new_message', newMessage); 
+        const recipientSocket = onlineUsers.get(destination.toLowerCase());
+        if (recipientSocket) io.to(recipientSocket).emit('private_message', msgNode);
+        socket.emit('private_message', msgNode); 
       }
-    } catch (err) {
-      console.error("Message save error:", err);
-    }
-  });
-
-  socket.on('typing_status', (data) => {
-    socket.to(data.receiver).emit('peer_typing', { sender: data.sender, isTyping: data.isTyping });
-  });
-
-  socket.on('trigger_wipe', (data) => {
-    io.to(data.receiver).emit('chat_wiped', { isGroup: data.isGroupChat, receiver: data.receiver, wipedBy: data.sender });
-  });
-
-  // 📞 REAL-TIME WEBRTC VIDEO SIGNALING TUNNELS
-  socket.on('call_user', (data) => {
-    io.to(data.target).emit('call_incoming', { from: data.sender, offer: data.offer });
-  });
-
-  socket.on('answer_call', (data) => {
-    io.to(data.target).emit('call_answered', { answer: data.answer });
-  });
-
-  socket.on('ice_candidate', (data) => {
-    io.to(data.target).emit('ice_candidate', { candidate: data.candidate });
-  });
-
-  socket.on('end_call', (data) => {
-    io.to(data.target).emit('call_ended');
+    } catch (err) { console.error("Socket traffic fault:", err); }
   });
 
   socket.on('disconnect', () => {
-    // 🔴 PRESENCE: Find and clean out users when they shut down their tab sessions
-    for (let [user, id] of onlineUsers.entries()) {
-      if (id === socket.id) {
-        onlineUsers.delete(user);
-        io.emit('online_status_sync', Array.from(onlineUsers.keys()));
-        break;
-      }
+    if (boundSessionUser) {
+      onlineUsers.delete(boundSessionUser);
+      io.emit('online_status_sync', Array.from(onlineUsers.keys()));
     }
-    console.log(`Socket disconnected: ${socket.id}`);
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Blue Rocket Server running smoothly on port ${PORT} 🚀`));
+server.listen(PORT, () => console.log(`Engine live running on layout node port: ${PORT} ⚡`));
