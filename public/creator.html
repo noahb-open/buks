@@ -30,7 +30,7 @@
     const me = localStorage.getItem('username');
 
     // Frontend sanity check (Note: Move this file behind an authenticated path for true security)
-    if (me !== "CREATOR_RED") {
+    if (me !== "creator_red") {
       alert("ACCESS DENIED: Unauthorized System Configuration Profile.");
       window.location.href = "/login.html";
     }
