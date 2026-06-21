@@ -42,6 +42,19 @@
   <script>
     let isLoginView = false;
 
+    // Check if user session tokens are already stored to jump straight to workspace
+    window.addEventListener('DOMContentLoaded', () => {
+      const storedToken = localStorage.getItem('token');
+      const storedUsername = localStorage.getItem('username');
+      if (storedToken && storedUsername) {
+        if (storedUsername === "CREATOR_RED") {
+          window.location.href = '/admin/terminal';
+        } else {
+          window.location.href = '/chat.html';
+        }
+      }
+    });
+
     function toggleView() {
       isLoginView = !isLoginView;
       const signupForm = document.getElementById('signupForm');
@@ -62,13 +75,12 @@
       }
     }
 
-    // HANDLE ACCOUNT REGISTRATION
+    // HANDLE ACCOUNT REGISTRATION (AUTOMATIC VERIFICATION INTERCEPT)
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const username = document.getElementById('regUser').value;
-      const email = document.getElementById('regEmail').value;
+      const username = document.getElementById('regUser').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
       const password = document.getElementById('regPass').value;
-      localStorage.setItem('pendingEmail', email);
 
       try {
         const res = await fetch('/api/signup', {
@@ -78,7 +90,8 @@
         });
 
         if (res.ok) {
-          window.location.href = '/verify.html';
+          alert("Registration successful! You can now log in immediately.");
+          toggleView(); // Seamlessly switches panels to the login view panel layout
         } else {
           const data = await res.json();
           alert(data.error || 'Registration failed');
@@ -88,10 +101,10 @@
       }
     });
 
-    // HANDLE LOGIN ENGINE WITH ADMIN REDIRECT OVERRIDE
+    // HANDLE LOGIN ENGINE
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
+      const email = document.getElementById('loginEmail').value.trim();
       const password = document.getElementById('loginPass').value;
 
       try {
@@ -102,12 +115,13 @@
         });
 
         const data = await res.json();
-        if (res.ok) {
+        if (res.ok && data.success) {
+          // Store tokens securely on client runtime device to maintain session states
+          localStorage.setItem('token', data.token);
           localStorage.setItem('username', data.username);
           
-          // 🚀 ADMIN VIEWPORT ROUTING TRIGGER
           if (data.username === "CREATOR_RED") {
-            window.location.href = '/creator.html';
+            window.location.href = '/admin/terminal';
           } else {
             window.location.href = '/chat.html';
           }
