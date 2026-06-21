@@ -5,9 +5,9 @@ const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const path = require('path');
 
-// Database Schema Models
 const User = require('./models/User');
 const Message = require('./models/Message');
 const Group = require('./models/Group'); 
@@ -16,37 +16,38 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
-// Server configuration middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// Serve main client files out of public folder
 app.use(express.static('public')); 
 
-// Database Connection Orchestration
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB Connected 🚀'))
-  .catch(err => console.error('DB Error:', err));
+  .then(() => console.log('MongoDB Connected'))
+  .catch(err => console.error(err));
 
-// Global dynamic presence mapping matrix tracker
 let onlineUsers = new Map(); 
 
-// Helper function to build a unified sidebar channel object payload for client synchronization
+const transporter = nodemailer.createTransport({
+  host: 'messa.up.railway.app',
+  port: 2525,
+  secure: false, 
+  auth: {
+    user: 'your_smtp_username_here', 
+    pass: 'your_smtp_password_here'  
+  }
+});
+
 async function getUserChannels(username) {
   const userRecord = await User.findOne({ username: username });
   if (!userRecord) return [];
 
-  // 1. Direct messaging channels matching friend list configurations
   const directChannels = (userRecord.friends || []).map(fName => ({ name: fName, isGroup: false }));
 
-  // 2. Extracted chat channels matching database group memberships
   const individualGroups = await Group.find({ members: userRecord.username });
   const groupChannels = individualGroups.map(g => ({ name: g.groupId, isGroup: true }));
 
   return [...directChannels, ...groupChannels];
 }
 
-// Helper function to broadcast live layout update states over targeted socket channels
 async function pushDashboardSync(username) {
   const user = await User.findOne({ username: username });
   if (!user) return;
@@ -60,7 +61,6 @@ async function pushDashboardSync(username) {
   });
 }
 
-// Emergency Admin Setup Hook Node 
 mongoose.connection.once('open', async () => {
   try {
     const adminEmail = "creator@bluerocket.net";
@@ -85,10 +85,9 @@ mongoose.connection.once('open', async () => {
   }
 });
 
-// Server-Side Authorization Token Guard Middleware
 function requireAdminAuth(req, res, next) {
   try {
-    const token = req.headers.authorization?.split(' ') || req.query.token;
+    const token = req.headers.authorization?.split(' ')[1] || req.query.token;
     if (!token) return res.status(401).send('<h1>Access Denied</h1><p>Missing structural session validation token.</p>');
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -104,12 +103,10 @@ function requireAdminAuth(req, res, next) {
   }
 }
 
-// Secure route to serve creator console from outside public web view folder tree
 app.get('/admin/terminal', requireAdminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator.html'));
 });
 
-// 1. SIGN UP ROUTE (AUTO VERIFIES WITH NO CODES SENT)
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -117,30 +114,67 @@ app.post('/api/signup', async (req, res) => {
     const existing = await User.findOne({ $or: [{ email: email }, { username: username }] });
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
+    const dynamicTokenCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({ 
       username: username, 
       email: email, 
       password: hashedPassword, 
-      isVerified: true, 
+      verificationCode: dynamicTokenCode, 
       friends: [], 
       requests: [], 
       groupRequests: [] 
     });
     await newUser.save();
 
-    res.status(201).json({ message: 'User created successfully!' });
+    const mailOptions = {
+      from: '"Blue Rocket Core" <no-reply@messa.up.railway.app>',
+      to: email,
+      subject: '🚀 Your Blue Rocket Access Key Token',
+      text: `Your 6-digit registration launch passcode is: ${dynamicTokenCode}.`,
+      html: `
+        <div style="font-family: sans-serif; background: #0d1b2a; color: white; padding: 25px; border-radius: 10px; max-width: 400px; margin: auto;">
+          <h2 style="color: #00b4d8; text-align: center;">Welcome to Blue Rocket 🚀</h2>
+          <div style="background: #1b263b; font-size: 28px; font-weight: bold; color: #38b000; text-align: center; padding: 15px; border-radius: 5px; letter-spacing: 5px; margin: 20px 0;">
+            ${dynamicTokenCode}
+          </div>
+        </div>`
+    };
+
+    transporter.sendMail(mailOptions, (error) => {
+      if (error) console.error(error);
+      console.log(`Fallback debug access key token for dev runtime testing [${email}]: ${dynamicTokenCode}`);
+    });
+
+    res.status(201).json({ message: 'User verification frame staged.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2. ACCOUNT LOGIN ROUTE
+app.post('/api/verify', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    const user = await User.findOne({ email: email });
+
+    if (user && user.verificationCode === code.trim()) {
+      user.isVerified = true;
+      user.verificationCode = null; 
+      await user.save();
+
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ success: true, token, username: user.username });
+    }
+    return res.status(400).json({ success: false, message: 'Invalid registration code.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email: email });
     
     if (!user) return res.status(404).json({ success: false, message: 'User matching credentials not found.' });
+    if (!user.isVerified) return res.status(401).json({ success: false, message: 'Verify account node first.' });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) return res.status(400).json({ success: false, message: 'Wrong credentials.' });
@@ -150,7 +184,6 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 3. GET INITIAL DASHBOARD COMPILER LOAD DATA
 app.get('/api/friends-data/:username', async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -164,7 +197,6 @@ app.get('/api/friends-data/:username', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. FETCH RE-ARCHITECTED MESSAGE HISTORIES
 app.get('/api/messages/:me/:peer', async (req, res) => {
   try {
     const { me, peer } = req.params;
@@ -186,26 +218,24 @@ app.get('/api/messages/:me/:peer', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 5. FRIEND REQUEST ACTIONS
 app.post('/api/friends/request', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
 
-    if (myUsername === friendUsername) return res.status(400).json({ error: "You cannot add yourself." });
+    if (myUsername === friendUsername) return res.status(400).json({ error: "Cannot add yourself." });
 
     const target = await User.findOne({ username: friendUsername });
-    if (!target) return res.status(404).json({ error: "User doesn't exist." });
+    if (!target) return res.status(404).json({ error: "Target profile node does not exist." });
 
     const me = await User.findOne({ username: myUsername });
-    if (me.friends.includes(friendUsername)) return res.status(400).json({ error: "You are already friends." });
-    if (target.requests.includes(myUsername)) return res.status(400).json({ error: "Friend request is already pending." });
+    if (me.friends.includes(friendUsername)) return res.status(400).json({ error: "Already friends." });
+    if (target.requests.includes(myUsername)) return res.status(400).json({ error: "Request already processing." });
 
     target.requests.push(myUsername);
     await target.save();
 
     await pushDashboardSync(target.username);
-    // ✨ SECURE BROWSER POPUP TARGET INTERCEPT SUCCESS MESSAGING 
-    res.json({ success: true, message: "request blasted to them" });
+    res.json({ success: true, message: "Request mapped successfully." });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -246,29 +276,6 @@ app.post('/api/friends/decline', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/friends/delete', async (req, res) => {
-  try {
-    const { myUsername, friendUsername } = req.body;
-
-    const me = await User.findOne({ username: myUsername });
-    const exFriend = await User.findOne({ username: friendUsername });
-
-    if (!me || !exFriend) return res.status(404).json({ error: "Profiles missing." });
-
-    me.friends = me.friends.filter(name => name !== friendUsername);
-    exFriend.friends = exFriend.friends.filter(name => name !== myUsername);
-
-    await me.save();
-    await exFriend.save();
-
-    await pushDashboardSync(me.username);
-    await pushDashboardSync(exFriend.username);
-
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// 6. REAL-TIME CHAT GROUP AGGREGATIONS
 app.post('/api/groups/create', async (req, res) => {
   try {
     const { name, creator } = req.body;
@@ -344,8 +351,6 @@ app.get('/api/groups/members/:groupId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
-// 7. REAL-TIME WEBSOCKET MESH WORKSPACE LISTENERS
 io.on('connection', (socket) => {
   let boundSessionUser = null;
 
@@ -418,26 +423,6 @@ io.on('connection', (socket) => {
         if (recipientSocket) io.to(recipientSocket).emit('private_message', msgNode);
         socket.emit('private_message', msgNode); 
       }
-
-      // INTEGRATED EXTERNAL PUSH NOTIFICATION RELAY SYSTEM
-      const isTargetUserOnline = onlineUsers.has(destination);
-      if (!isTargetUserOnline && destination !== "GLOBAL_BROADCAST") {
-        
-        const externalChannelTopic = `bluerocket_chat_${destination.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        const alertTitle = payload.isGroupChat ? `🚀 Group Alert [${payload.receiver}]` : `💬 Message from @${payload.sender}`;
-        const alertBody = payload.message || "Sent an attachment file... 📁";
-
-        fetch(`https://ntfy.sh{externalChannelTopic}`, {
-          method: 'POST',
-          body: alertBody,
-          headers: {
-            'Title': alertTitle,
-            'Priority': 'high',
-            'Tags': 'speech_balloon,rocket'
-          }
-        }).catch(err => console.error("External notification skipped:", err));
-      }
-
     } catch (err) { console.error("Socket traffic fault:", err); }
   });
 
@@ -450,4 +435,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Engine live running on layout node port: ${PORT} ⚡`));
+server.listen(PORT, () => console.log(`Engine live running on layout node port: ${PORT}`));
