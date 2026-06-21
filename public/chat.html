@@ -23,16 +23,16 @@
     .section-header { font-size: 15px; font-weight: bold; color: #00b4d8; margin: 18px 0 8px 0; display: flex; align-items: center; gap: 6px; }
     .feed-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 15px; }
     
-    .channel-item { padding: 10px; border-radius: 6px; background: #3a506b; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; transition: 0.2s; }
-    .channel-item:hover { background: #5c715e; }
-    .channel-item.active { background: #0077b6; }
+    .channel-item { padding: 10px; border-radius: 6px; background: #3a506b; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; transition: 0.2s; border-left: 4px solid transparent; }
+    .channel-item:hover { background: #5c715e; transform: translateX(2px); }
+    .channel-item.active { background: #0077b6; border-left-color: #00b4d8; }
     .presence-dot { width: 8px; height: 8px; border-radius: 50%; background: #6c757d; }
     .presence-dot.online { background: #38b000; box-shadow: 0 0 6px #38b000; }
     
     /* ACTION BOXES FOR REQUESTS */
-    .req-card { padding: 8px; background: #222e50; border-radius: 5px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+    .req-card { padding: 10px; background: #222e50; border-radius: 6px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
     .req-actions { display: flex; gap: 4px; }
-    .req-actions button { flex: 1; border: none; padding: 4px; font-size: 11px; font-weight: bold; border-radius: 3px; cursor: pointer; color: white; }
+    .req-actions button { flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; color: white; }
 
     /* CHAT WORKSPACE DESIGN */
     .chat-area { flex: 1; display: flex; flex-direction: column; background: #0b132b; }
@@ -46,8 +46,8 @@
     .message.received { background: #3a506b; align-self: flex-start; }
     .message img { max-width: 100%; border-radius: 4px; margin-top: 5px; }
 
-    /* BAR DESIGN */
-    .input-bar { padding: 15px; background: #1c2541; display: flex; gap: 10px; align-items: center; }
+    /* FOOTER INPUT CONTROLS */
+    .input-bar { padding: 15px; background: #1c2541; display: flex; gap: 10px; align-items: center; border-top: 1px solid #3a506b; }
     .media-btn { background: #e0e1dd; color: #0b132b; border: none; padding: 10px; border-radius: 5px; cursor: pointer; font-size: 16px; }
     input[type="text"] { flex: 1; padding: 11px; border: none; border-radius: 5px; background: #e0e1dd; color: #0b132b; font-size: 15px; outline: none; }
     .send-btn { background: #00b4d8; color: white; border: none; padding: 11px 22px; border-radius: 5px; font-weight: bold; cursor: pointer; }
@@ -60,20 +60,20 @@
 </head>
 <body>
 
-  <!-- RESTORED SIDEBAR COMPONENT FROM IMAGE -->
+  <!-- SIDEBAR SYSTEM FROM YOUR SCREENSHOT -->
   <div class="sidebar">
     <div class="user-profile">
       <span id="myUsernameDisplay">🚀 User</span>
       <button class="logout-btn" onclick="logout()">Log Out</button>
     </div>
 
-    <!-- BUTTON MATCHES -->
+    <!-- ACTION CONTROLS MATRIX -->
     <div class="btn-container">
       <button class="add-friend-btn" onclick="promptFriendAdd()">➕ Add Friend</button>
       <button class="new-group-btn" onclick="promptGroupCreate()">⚡ New Group</button>
     </div>
 
-    <!-- FEED LISTINGS -->
+    <!-- DYNAMIC LISTINGS FEEDS -->
     <div class="section-header">Pending Requests ✉️</div>
     <div class="feed-container" id="friendRequestsFeed"></div>
 
@@ -84,7 +84,7 @@
     <div class="feed-container" id="activeChannelsFeed"></div>
   </div>
 
-  <!-- CHAT WINDOW -->
+  <!-- MAIN MESSAGE GRAPH VIEWPORT -->
   <div class="chat-area">
     <div class="chat-header">
       <div id="chatHeaderTitle">No active chat</div>
@@ -93,7 +93,7 @@
     
     <div class="messages-container" id="messagesContainer"></div>
 
-    <!-- CAMERA FLOATER -->
+    <!-- CAMERA OVERLAY MODULE -->
     <div class="camera-box hidden" id="cameraViewportPanel">
       <video id="webcamStream" autoplay playsinline></video>
       <div style="display: flex; gap: 4px;">
@@ -102,7 +102,7 @@
       </div>
     </div>
 
-    <!-- FOOTER INPUT STRIP MATCHING SCREENSHOT -->
+    <!-- INPUT DOCK CONTROLS -->
     <div class="input-bar">
       <button class="media-btn" onclick="openCameraViewport()">📷</button>
       <button class="media-btn" onclick="document.getElementById('hiddenFileInput').click()">📎</button>
@@ -111,7 +111,7 @@
       <input type="text" id="messageInput" placeholder="Type a message safely..." onkeydown="handleKeyPress(event)" oninput="emitTypingState()">
       
       <button class="send-btn" onclick="executeMessageDispatch()">Send</button>
-      <button class="wipe-btn" onclick="clearStagedAttachmentFile()" id="wipeBtn" class="hidden">Wipe</button>
+      <button class="wipe-btn hidden" onclick="clearStagedAttachmentFile()" id="wipeBtn">Wipe</button>
     </div>
   </div>
 
@@ -154,7 +154,7 @@
         if (!res.ok) return;
         const data = await res.json();
 
-        // RENDER CHANNELS FEED
+        // RENDER ACTIVE CONTEXT MATRIX FEEDS
         const channelsFeed = document.getElementById('activeChannelsFeed');
         channelsFeed.innerHTML = '';
         
@@ -169,7 +169,7 @@
           });
         }
 
-        // RENDER PENDING FRIEND REQUESTS
+        // RENDER INCOMING FRIEND INVITATIONS
         const friendReqFeed = document.getElementById('friendRequestsFeed');
         friendReqFeed.innerHTML = '';
         if (data.requests && data.requests.length > 0) {
@@ -186,7 +186,7 @@
           });
         }
 
-        // RENDER PENDING GROUP REQUESTS
+        // RENDER INCOMING GROUP INVITATIONS
         const groupReqFeed = document.getElementById('groupInvitesFeed');
         groupReqFeed.innerHTML = '';
         if (data.groupRequests && data.groupRequests.length > 0) {
@@ -247,20 +247,26 @@
       container.appendChild(div);
     }
 
+    // FIXED: Prompt mechanics securely push data matching structural model shapes
     async function promptFriendAdd() {
       const targetUsername = prompt("Enter target username connection node:");
       if (!targetUsername) return;
+      
       const res = await fetch('/api/friends/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ myUsername: me, friendUsername: targetUsername.trim() })
       });
-      if (res.ok) { alert("Connection request staged!"); refreshDashboardDataSync(); }
+      const data = await res.json();
+      if (res.ok) { alert(data.message || "Connection request staged!"); refreshDashboardDataSync(); }
+      else { alert(data.error || "Failed to process addition."); }
     }
 
+    // FIXED: Parameter mappings cleanly pass authorization identities
     async function promptGroupCreate() {
       const name = prompt("Enter fresh group channel title:");
       if (!name) return;
+      
       const res = await fetch('/api/groups/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -288,7 +294,7 @@
     }
 
     function stageFileAttachment(event) {
-      const file = event.target.files[0];
+      const file = event.target.files;
       if (!file) return;
       stagedFileName = file.name;
       stagedFileType = file.type;
