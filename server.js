@@ -121,43 +121,37 @@ app.get('/admin/terminal', requireAdminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator.html'));
 });
 
-// 1. SIGN UP ROUTE WITH REAL-TIME EMAIL VERIFICATION CODES
+// 1. SIGN UP ROUTE (BYPASSES EMAIL - AUTO-VERIFIES INSTANTLY)
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
     const cleanUser = username.trim().toLowerCase();
     const cleanEmail = email.trim().toLowerCase();
 
+    // Prevent duplicate entries
     const existing = await User.findOne({ $or: [{ email: cleanEmail }, { username: cleanUser }] });
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
-    const dynamicTokenCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Accounts are marked verified immediately
     const newUser = new User({ 
       username: cleanUser, 
       email: cleanEmail, 
       password: hashedPassword, 
-      verificationCode: dynamicTokenCode, 
+      isVerified: true, 
+      verificationCode: null, 
       friends: [], 
       requests: [], 
       groupRequests: [] 
     });
     await newUser.save();
 
-    const mailOptions = {
-      from: `"Blue Rocket Core" <${process.env.EMAIL_USER}>`,
-      to: cleanEmail,
-      subject: '🚀 Your Blue Rocket Access Key Token',
-      text: `Your 6-digit registration launch passcode is: ${dynamicTokenCode}.`,
-      html: `
-        <div style="font-family: sans-serif; background: #0d1b2a; color: white; padding: 25px; border-radius: 10px; max-width: 400px; margin: auto;">
-          <h2 style="color: #00b4d8; text-align: center;">Welcome to Blue Rocket 🚀</h2>
-          <div style="background: #1b263b; font-size: 28px; font-weight: bold; color: #38b000; text-align: center; padding: 15px; border-radius: 5px; letter-spacing: 5px; margin: 20px 0;">
-            ${dynamicTokenCode}
-          </div>
-        </div>`
-    };
+    res.status(201).json({ message: 'User created and verified successfully!' });
+  } catch (err) { 
+    res.status(500).json({ error: err.message }); 
+  }
+});
 
     transporter.sendMail(mailOptions, (error) => {
       if (error) console.error("SMTP delivery fault:", error);
