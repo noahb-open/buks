@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 
-// Database Schema Models (Using your exact original file paths)
+// Database Schema Models
 const User = require('./models/User');
 const Message = require('./models/Message');
 const Group = require('./models/Group'); 
@@ -60,7 +60,7 @@ async function pushDashboardSync(username) {
   });
 }
 
-// Emergency Admin Setup Hook Node (Using your exact original uppercase identity setup)
+// Emergency Admin Setup Hook Node 
 mongoose.connection.once('open', async () => {
   try {
     const adminEmail = "creator@bluerocket.net";
@@ -85,7 +85,7 @@ mongoose.connection.once('open', async () => {
   }
 });
 
-// Server-Side Authorization Token Guard Middleware (Original Uppercase Guard Logic)
+// Server-Side Authorization Token Guard Middleware
 function requireAdminAuth(req, res, next) {
   try {
     const token = req.headers.authorization?.split(' ') || req.query.token;
@@ -109,7 +109,7 @@ app.get('/admin/terminal', requireAdminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator.html'));
 });
 
-// 1. SIGN UP ROUTE (YOUR FIRST VERSION - AUTO VERIFIES WITH NO CODES SENT)
+// 1. SIGN UP ROUTE (AUTO VERIFIES WITH NO CODES SENT)
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -123,7 +123,7 @@ app.post('/api/signup', async (req, res) => {
       username: username, 
       email: email, 
       password: hashedPassword, 
-      isVerified: true, // Matches your original instant-pass framework parameters
+      isVerified: true, 
       friends: [], 
       requests: [], 
       groupRequests: [] 
@@ -134,7 +134,7 @@ app.post('/api/signup', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2. ACCOUNT LOGIN ROUTE (Original logic layout path execution)
+// 2. ACCOUNT LOGIN ROUTE
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -191,20 +191,21 @@ app.post('/api/friends/request', async (req, res) => {
   try {
     const { myUsername, friendUsername } = req.body;
 
-    if (myUsername === friendUsername) return res.status(400).json({ error: "Cannot add yourself." });
+    if (myUsername === friendUsername) return res.status(400).json({ error: "You cannot add yourself." });
 
     const target = await User.findOne({ username: friendUsername });
-    if (!target) return res.status(404).json({ error: "Target profile node does not exist." });
+    if (!target) return res.status(404).json({ error: "User doesn't exist." });
 
     const me = await User.findOne({ username: myUsername });
-    if (me.friends.includes(friendUsername)) return res.status(400).json({ error: "Already friends." });
-    if (target.requests.includes(myUsername)) return res.status(400).json({ error: "Request already processing." });
+    if (me.friends.includes(friendUsername)) return res.status(400).json({ error: "You are already friends." });
+    if (target.requests.includes(myUsername)) return res.status(400).json({ error: "Friend request is already pending." });
 
     target.requests.push(myUsername);
     await target.save();
 
     await pushDashboardSync(target.username);
-    res.json({ success: true, message: "Request mapped successfully." });
+    // ✨ SECURE BROWSER POPUP TARGET INTERCEPT SUCCESS MESSAGING 
+    res.json({ success: true, message: "request blasted to them" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -344,7 +345,7 @@ app.get('/api/groups/members/:groupId', async (req, res) => {
 });
 
 
-// 7. REAL-TIME WEBSOCKET MESH WORKSPACE LISTENERS (WITH PUSH NOTIFICATIONS API WEAVED IN)
+// 7. REAL-TIME WEBSOCKET MESH WORKSPACE LISTENERS
 io.on('connection', (socket) => {
   let boundSessionUser = null;
 
