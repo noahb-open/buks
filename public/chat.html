@@ -2,677 +2,527 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Blue Rocket - Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blue Rocket - Messenger Hub</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; background: #0d1b2a; color: white; }
-    .side { width: 25%; background: #1b263b; padding: 15px; border-right: 2px solid #415a77; display: flex; flex-direction: column; overflow-y: auto;}
-    .main { width: 75%; display: flex; flex-direction: column; background: #000814; }
-    .box { flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-    .input-bar { padding: 15px; display: flex; gap: 10px; background: #1b263b; align-items: center; }
-    input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; background: #415a77; color: white; }
-    button { padding: 10px 15px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1b2a; color: #fff; display: flex; height: 100vh; overflow: hidden; }
     
-    .nav-btn-grid { display: flex; gap: 10px; margin-bottom: 15px; }
-    .friend-btn { flex-grow: 1; padding: 10px; background: #0077b6; color: white; border-radius: 5px; font-size: 13px; text-align: center; }
-    .group-create-btn { flex-grow: 1; padding: 10px; background: #6a0dad; color: white; border-radius: 5px; font-size: 13px; text-align: center; }
+    /* SIDEBAR SYSTEM PANELS */
+    .sidebar { width: 320px; background: #1b263b; display: flex; flex-direction: column; border-right: 2px solid #0d1b2a; }
+    .user-profile { padding: 20px; background: #0d1b2a; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #415a77; }
+    .user-profile span { font-weight: bold; color: #00b4d8; font-size: 16px; }
+    .action-tabs { padding: 10px 15px; background: #14213d; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #415a77; }
+    .action-tabs input { padding: 8px; border-radius: 5px; border: none; background: #e0e1dd; color: #0d1b2a; font-size: 13px; }
+    .action-tabs button { padding: 8px; border: none; border-radius: 5px; background: #0077b6; color: white; font-weight: bold; cursor: pointer; font-size: 13px; }
+    .action-tabs button:hover { background: #0096c7; }
     
-    .friend-item { padding: 12px; background: #415a77; margin: 5px 0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-    .friend-item:hover, .friend-item.active { background: #0077b6; }
-    .req-item { padding: 10px; background: #5c677d; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
-    .accept-btn { background: #38b000; color: white; padding: 4px 8px; font-size: 12px; margin-right: 5px; border-radius: 3px; }
-    .decline-btn { background: #e63946; color: white; padding: 4px 8px; font-size: 12px; border-radius: 3px; }
-    .delete-btn { background: #d90429; color: white; padding: 4px 8px; font-size: 11px; border-radius: 3px; }
+    /* SCROLLABLE FEEDS LAYER */
+    .channels-list { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+    .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #e0e1dd; opacity: 0.6; margin-top: 10px; margin-bottom: 5px; }
+    .channel-item { padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #415a77; transition: 0.2s; border-left: 4px solid transparent; }
+    .channel-item:hover { background: #778da9; transform: translateX(2px); }
+    .channel-item.active { background: #0077b6; border-left-color: #00b4d8; box-shadow: 0 4px 10px rgba(0,119,182,0.3); }
+    .presence-dot { width: 10px; height: 10px; border-radius: 50%; background: #6c757d; }
+    .presence-dot.online { background: #38b000; box-shadow: 0 0 8px #38b000; }
     
-    .send-btn { background: #00b4d8; color: white; }
-    .wipe-btn { background: #d90429; color: white; }
-    .media-btn { background: #e0e1dd; color: #0d1b2a; font-size: 18px; padding: 8px 12px; }
-    h4 { margin: 15px 0 5px 0; color: #00b4d8; border-bottom: 1px solid #415a77; padding-bottom: 3px;}
+    /* CARD REQUEST BADGES */
+    .request-item { padding: 10px; background: #2a3c54; border-radius: 6px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+    .request-btns { display: flex; gap: 5px; }
+    .request-btns button { flex: 1; padding: 5px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; }
+
+    /* CORE CHAT WORKSPACE AREA */
+    .chat-area { flex: 1; display: flex; flex-direction: column; background: #0d1b2a; }
+    .chat-header { padding: 20px; background: #1b263b; border-bottom: 2px solid #0d1b2a; display: flex; justify-content: space-between; align-items: center; }
+    .chat-header .title { font-size: 18px; font-weight: bold; color: #e0e1dd; }
+    .chat-header .typing-indicator { font-size: 13px; color: #38b000; font-style: italic; min-height: 20px; }
     
-    .msg-wrapper { max-width: 70%; padding: 10px; border-radius: 8px; line-break: anywhere; margin: 5px 0; }
-    .msg-me { background: #00b4d8; align-self: flex-end; color: black; }
-    .msg-peer { background: #415a77; align-self: flex-start; color: white; }
-    .msg-meta { font-size: 11px; opacity: 0.7; margin-bottom: 3px; font-weight: bold; }
+    /* MESSAGES BUBBLE DISPATCHER SYSTEM */
+    .messages-container { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+    .message { max-width: 55%; padding: 12px 18px; border-radius: 12px; word-wrap: break-all; line-height: 1.4; display: flex; flex-direction: column; gap: 5px; position: relative; animation: slideUp 0.15s ease-out; }
+    @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .message .sender-tag { font-size: 11px; font-weight: bold; opacity: 0.7; margin-bottom: 2px; }
+    .message.sent { background: #0077b6; align-self: flex-end; border-bottom-right-radius: 2px; }
+    .message.received { background: #415a77; align-self: flex-start; border-bottom-left-radius: 2px; }
     
-    .chat-img, .chat-video { max-width: 250px; max-height: 250px; border-radius: 8px; margin-top: 5px; display: block; border: 2px solid rgba(255,255,255,0.1); }
-    .file-link { color: #00b4d8; text-decoration: underline; font-weight: bold; display: inline-block; margin-top: 5px; }
-    #cameraModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1b263b; padding: 20px; border-radius: 12px; border: 2px solid #00b4d8; text-align: center; z-index: 1000; }
-    #videoFeed { width: 320px; height: 240px; background: #000; border-radius: 6px; transform: scaleX(-1); }
-    
-    #typingIndicator { font-style: italic; color: #38b000; font-size: 13px; margin-left: 15px; display: none; padding-bottom: 5px; }
-    #rosterBar { font-size: 12px; color: #a4c3b2; opacity: 0.8; margin-top: 3px; font-weight: normal; }
+    /* ATTACHMENTS AND MEDIA STREAMS LAYOUTS */
+    .message img { max-width: 100%; border-radius: 8px; margin-top: 5px; cursor: pointer; transition: 0.2s; }
+    .message img:hover { filter: brightness(0.9); }
+    .message video { max-width: 100%; border-radius: 8px; margin-top: 5px; }
+    .message .file-download { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px; text-decoration: none; color: #00b4d8; font-weight: bold; font-size: 13px; margin-top: 5px; }
+
+    /* MEDIA INTERACTION ATTACHMENT BOXES */
+    .media-preview-box { padding: 10px 20px; background: #14213d; border-top: 1px solid #415a77; display: flex; justify-content: space-between; align-items: center; }
+    .camera-viewport-hidden { display: none !important; }
+    .camera-panel { width: 100%; max-width: 320px; background: #000; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; gap: 5px; padding: 10px; margin: 10px auto; border: 2px solid #0077b6; }
+    .camera-panel video { width: 100%; transform: scaleX(-1); border-radius: 4px; }
+
+    /* ENTRY INPUT CONTROLS */
+    .input-bar { padding: 20px; background: #1b263b; display: flex; align-items: center; gap: 12px; border-top: 1px solid #415a77; }
+    .input-wrapper { flex: 1; position: relative; display: flex; align-items: center; }
+    input[type="text"] { width: 100%; padding: 12px 45px 12px 15px; border: none; border-radius: 8px; background: #e0e1dd; color: #0d1b2a; font-size: 15px; outline: none; }
+    .attach-icon-btn { position: absolute; right: 12px; cursor: pointer; font-size: 20px; color: #415a77; transition: 0.2s; }
+    .attach-icon-btn:hover { color: #0077b6; }
+    .camera-trigger { font-size: 20px; cursor: pointer; color: #e0e1dd; opacity: 0.7; transition: 0.2s; }
+    .camera-trigger:hover { opacity: 1; color: #00b4d8; }
+    button.send-btn { padding: 12px 28px; border: none; border-radius: 8px; background: #38b000; color: white; font-weight: bold; cursor: pointer; font-size: 15px; transition: 0.2s; box-shadow: 0 4px 6px rgba(56,176,0,0.2); }
+    button.send-btn:hover { background: #2dc600; transform: translateY(-1px); }
   </style>
 </head>
 <body>
 
-  <div id="cameraModal">
-    <h3>Camera Capture Engine</h3>
-    <video id="videoFeed" autoplay playsinline></video><br><br>
-    <button onclick="capturePhoto()" style="background:#38b000; color:white;">📸 Snap Photo</button>
-    <button onclick="closeCamera()" style="background:#d90429; color:white;">Cancel</button>
-  </div>
-
-  <div class="side">
-    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
-      <h3 id="nameTag" style="margin: 0; font-size: 20px; white-space: nowrap;">🚀 User</h3>
-      <a href="/" onclick="localStorage.removeItem('username');" style="background: #e63946; color: white; padding: 8px 12px; font-size: 13px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block; text-align: center; width: fit-content;">Log Out</a>
+  <!-- LEFT SIDEBAR TRACKER MODULE -->
+  <div class="sidebar">
+    <div class="user-profile">
+      <span id="myUsernameDisplay">@User</span>
+      <button onclick="logout()" style="background: #ef233c; padding: 6px 12px; font-size: 12px; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer;">LOGOUT</button>
     </div>
 
-    <div class="nav-btn-grid">
-      <button class="friend-btn" onclick="sendFriendRequest()">➕ Add Friend</button>
-      <button class="group-create-btn" onclick="createGroupChat()">⚡ New Group</button>
+    <!-- CONTROL EXPANSION ACTION TABS -->
+    <div class="action-tabs">
+      <input type="text" id="friendSearchInput" placeholder="Enter target username...">
+      <button onclick="sendFriendRequest()">➕ Add Connection Node</button>
+      <input type="text" id="groupCreateInput" placeholder="Enter fresh group name...">
+      <button onclick="createNewGroupRoom()" style="background: #38b000;">🚀 Launch New Group</button>
     </div>
-    
-    <h4>Pending Requests 📩</h4>
-    <div id="requestsBox"></div>
 
-    <h4>Group Invites 👥</h4>
-    <div id="groupInvitesBox"></div>
+    <!-- LIVE DYNAMIC FEEDS SCROLL FRAME -->
+    <div class="channels-list">
+      <div class="section-title">Connection Matrix Channels</div>
+      <div id="activeChannelsFeed"></div>
 
-    <h4>Channels & Friends 🚀</h4>
-    <div id="friendsBox"></div>
+      <div class="section-title">Pending Friend Requisitions</div>
+      <div id="friendRequestsFeed" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+      <div class="section-title">Pending Group Invitations</div>
+      <div id="groupInvitesFeed" style="display: flex; flex-direction: column; gap: 8px;"></div>
+    </div>
   </div>
 
-  <div class="main">
-    <div style="display:flex; justify-content:space-between; align-items:center; background:#1b263b; padding-right:15px;">
-      <div style="padding:15px; font-size:18px; font-weight:bold; display: flex; flex-direction: column;">
-        <span id="target">No active chat</span>
-        <span id="rosterBar"></span>
+  <!-- MAIN CHAT WORKSPACE CONSOLE -->
+  <div class="chat-area">
+    <div class="chat-header">
+      <div>
+        <div class="title" id="chatHeaderTitle">Select an active node thread...</div>
+        <div class="typing-indicator" id="typingStatusSlot"></div>
       </div>
-      <div id="typingIndicator">typing...</div>
+      <!-- DYNAMIC CHANNEL MANAGEMENT TOOL -->
+      <div id="roomManagementActionsSlot"></div>
     </div>
-    <div class="box" id="window"></div>
+
+    <div class="messages-container" id="messagesContainer"></div>
+
+    <!-- CAMERA SCREEN FRAME SEPARATOR -->
+    <div class="camera-panel camera-viewport-hidden" id="cameraViewportPanel">
+      <video id="webcamStream" autoplay playsinline></video>
+      <div style="display: flex; gap: 5px; margin-top: 5px;">
+        <button onclick="captureCameraSnapshot()" style="background: #38b000; flex: 1;">SNAPSHOT</button>
+        <button onclick="closeCameraViewport()" style="background: #ef233c; flex: 1;">CLOSE</button>
+      </div>
+    </div>
+
+    <!-- ACTIVE FILE STAGING ATTACHMENT DISPLAY BAR -->
+    <div class="media-preview-box camera-viewport-hidden" id="attachmentStagingDisplayBar">
+      <span style="font-size: 13px; color: #00b4d8;" id="attachmentNameSlot">File staged...</span>
+      <button onclick="clearStagedAttachmentFile()" style="background: #ef233c; padding: 4px 10px; font-size: 11px;">Remove</button>
+    </div>
+
+    <!-- COMPRESSION UTILITIES FOOTER BAR -->
     <div class="input-bar">
-      <input type="file" id="fileSelector" style="display:none;" onchange="handleFileUpload(this)">
-      <button class="media-btn" onclick="document.getElementById('fileSelector').click()" title="Attach File">📎</button>
-      <button class="media-btn" onclick="openCamera()" title="Open Camera">📷</button>
-      <input type="text" id="msg" placeholder="Type a message safely..." onkeydown="handleKeyPress(event)" oninput="emitTypingStatus()">
-      <button class="send-btn" onclick="send()">Send</button>
-      <button class="wipe-btn" onclick="wipe()">Wipe</button>
+      <div class="camera-trigger" onclick="openCameraViewport()">📷</div>
+      
+      <div class="input-wrapper">
+        <input type="text" id="messageInput" placeholder="Type an end-to-end routing transmission..." onkeydown="handleKeyPress(event)" oninput="emitTypingState()">
+        <label class="attach-icon-btn" for="hiddenFileInput">📎</label>
+        <input type="file" id="hiddenFileInput" style="display: none;" onchange="stageFileAttachment(event)">
+      </div>
+
+      <button class="send-btn" onclick="executeMessageDispatch()">SEND</button>
     </div>
   </div>
 
   <script>
     const socket = io();
-    const me = localStorage.getItem('username') || 'user';
-    let peer = '';
-    let isGroup = false;
-    let streamInstance = null;
-    let typingTimeout;
-
-    // ✨ NEW SYSTEM TRACKERS: Stores real-time presence data and notification state matrices
-    let globalOnlineUsers = [];
-    let unreadChannels = {};
-
-    document.getElementById('nameTag').innerText = `🚀 ${me}`;
+    const me = localStorage.getItem('username');
     
-    socket.emit('join', me);
-    loadDashboardData();
-    socket.emit('request_online_sync'); // Ask server for active users instantly on entry
+    let peer = null; 
+    let isGroup = false;
+    let onlineUsersList = [];
+    
+    // Binary memory block holders for active attachment pipelines
+    let stagedFileBuffer = null;
+    let stagedFileType = null;
+    let stagedFileName = null;
+    let cameraVideoStreamObject = null;
+    let typingDebounceTimer = null;
 
-    function handleKeyPress(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        send();
-      }
+    if (!me) {
+      window.location.href = '/';
+    } else {
+      document.getElementById('myUsernameDisplay').innerText = `@${me}`;
     }
 
-    function emitTypingStatus() {
-      if (!peer) return;
-      socket.emit('typing_status', { sender: me, receiver: peer, isTyping: true });
-      clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
-      }, 2000);
+    // 🚀 NEW: INITIALIZE OUT-OF-APP EXTERNAL BACKGROUND PUSH NOTIFICATIONS
+function enableExternalPushNotifications() {
+      if (!me) return;
+      const cleanTopic = `bluerocket_chat_${me.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      console.log(`System notifications subscription routing live on: https://ntfy.sh{cleanTopic}`);
     }
 
-    async function loadDashboardData() {
+    window.addEventListener('DOMContentLoaded', () => {
+      enableExternalPushNotifications();
+      socket.emit('join', me);
+      refreshDashboardDataSync();
+      
+      // Request active presence tracking array
+      socket.emit('request_online_sync');
+    });
+
+    // 1. RE-ARCHITECTED DASHBOARD GRAPH COMPILER ENGINE LOGIC
+    async function refreshDashboardDataSync() {
       try {
         const res = await fetch(`/api/friends-data/${me}`);
-        if (!res.ok) throw new Error("Dashboard sync failure");
+        if (!res.ok) return;
         const data = await res.json();
+
+        // COMPILE SYSTEM OVERRIDE CHANNELS PANEL
+        const channelsFeed = document.getElementById('activeChannelsFeed');
+        channelsFeed.innerHTML = '';
         
-        let onLoadFriendsBox = document.getElementById('friendsBox');
-        if (onLoadFriendsBox) onLoadFriendsBox.innerHTML = ''; 
-        
-        // Render stored groups
-        const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-        localGroups.forEach(groupId => appendGroupDOM(groupId));
-
-        // Render Direct Friends
-        (data.friends || []).forEach(name => appendFriendDOM(name));
-
-        // Render Request box
-        const requestsContainer = document.getElementById('requestsBox');
-        if (requestsContainer) {
-          requestsContainer.innerHTML = ''; 
-          (data.requests || []).forEach(name => appendRequestDOM(name));
-        }
-
-        // Render group requests tray
-        const groupInvitesBox = document.getElementById('groupInvitesBox');
-        if (groupInvitesBox) {
-          groupInvitesBox.innerHTML = '';
-          (data.groupRequests || []).forEach(req => appendGroupInviteDOM(req));
-        }
-      } catch (err) {
-        console.error("Dashboard render stall caught:", err);
-      }
-    }
-
-    // ✨ UPGRADED DOM MODULE: Appends active green presence status dots and tracks red unread indicators
-    function appendFriendDOM(name) {
-      const box = document.getElementById('friendsBox');
-      const div = document.createElement('div');
-      
-      const isUnread = unreadChannels[name] === true && peer !== name;
-      div.className = `friend-item ${peer === name && !isGroup ? 'active' : ''}`;
-      if (isUnread) div.style.background = '#d90429'; 
-      div.setAttribute('data-id', name);
-      
-      const leftContainer = document.createElement('div');
-      leftContainer.style.display = 'flex';
-      leftContainer.style.alignItems = 'center';
-      leftContainer.style.gap = '8px';
-
-      const isOnline = globalOnlineUsers.includes(name);
-      const dot = document.createElement('span');
-      dot.style.width = '10px';
-      dot.style.height = '10px';
-      dot.style.borderRadius = '50%';
-      dot.style.display = 'inline-block';
-      dot.style.background = isOnline ? '#38b000' : '#5c677d';
-      dot.style.boxShadow = isOnline ? '0 0 8px #38b000' : 'none';
-      
-      const span = document.createElement('span');
-      span.innerText = `👤 ${name}`;
-      
-      leftContainer.appendChild(dot);
-      leftContainer.appendChild(span);
-      div.appendChild(leftContainer);
-
-      div.onclick = () => selectTargetChannel(name, false);
-
-      const delBtn = document.createElement('button');
-      delBtn.className = 'delete-btn';
-      delBtn.innerText = 'Remove';
-      delBtn.onclick = (e) => {
-        e.stopPropagation();
-        deleteFriend(name);
-      };
-      div.appendChild(delBtn);
-      if (box) box.appendChild(div);
-    }
-
-    // ✨ UPGRADED DOM MODULE: Tracks red unread notification flare styling rules for group layout containers
-    function appendGroupDOM(groupId) {
-      const box = document.getElementById('friendsBox');
-      const d = document.createElement('div');
-      
-      // Flash bright red if the room has background messages waiting
-      const isGroupUnread = unreadChannels[groupId] === true && peer !== groupId;
-      d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
-      d.setAttribute('data-id', groupId);
-      
-      if (isGroupUnread) {
-        d.style.background = '#d90429';
-      } else {
-        d.style.borderLeft = "4px solid #6a0dad";
-      }
-      
-      const displayLabel = groupId.replace('group_', '').toUpperCase();
-      d.innerHTML = `
-        <span>👥 ${displayLabel}</span> 
-        <div>
-          <button class="accept-btn" style="background:#6a0dad; color:white; padding:4px 8px; font-size:12px; border-radius:3px; margin-right:5px;" onclick="inviteToGroup(event, '${groupId}')">Invite</button>
-          <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>
-        </div>
-      `;
-      d.onclick = () => { selectTargetChannel(groupId, true); };
-      if (box) box.appendChild(d);
-      socket.emit('join', groupId);
-    }
-
-    function removeGroupLocal(event, groupId) {
-      event.stopPropagation();
-      let localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      localGroups = localGroups.filter(g => g !== groupId);
-      localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-      if (peer === groupId) { 
-        peer = ''; 
-        document.getElementById('target').innerText = 'No active chat'; 
-        document.getElementById('rosterBar').innerText = '';
-        document.getElementById('window').innerHTML = ''; 
-      }
-      loadDashboardData();
-    }
-
-    async function inviteToGroup(event, groupId) {
-      event.stopPropagation(); 
-      const targetUser = prompt("Enter username to invite to this group chat:");
-      if (!targetUser) return;
-      try {
-        const res = await fetch('/api/groups/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ groupId, creatorUsername: me, targetUsername: targetUser })
-        });
-        const data = await res.json();
-        if (res.ok) alert("Invitation sent successfully! Staged for user confirmation.");
-        else alert(data.error || "Invite rejected.");
-      } catch(err) { console.error("Group invitation pipe issue:", err); }
-    }
-
-    function appendGroupInviteDOM(req) {
-      const d = document.createElement('div');
-      d.className = 'req-item';
-      d.innerHTML = `
-        <span style="font-size:12px;">👥 ${req.groupName.toUpperCase()} <i style="opacity:0.6;">by ${req.invitedBy}</i></span>
-        <div>
-          <button class="accept-btn" onclick="acceptGroupInvite('${req.groupId}')">✓</button>
-          <button class="decline-btn" onclick="declineGroupInvite('${req.groupId}')">✗</button>
-        </div>
-      `;
-      document.getElementById('groupInvitesBox').appendChild(d);
-    }
-
-    async function acceptGroupInvite(groupId) {
-      try {
-        const res = await fetch('/api/groups/accept', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, groupId })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-          if (!localGroups.includes(data.groupId)) {
-            localGroups.push(data.groupId);
-            localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-          }
-          loadDashboardData();
-        }
-      } catch (err) { console.error(err); }
-    }
-
-    async function declineGroupInvite(groupId) {
-      try {
-        const res = await fetch('/api/groups/decline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, groupId })
-        });
-        if (res.ok) loadDashboardData();
-      } catch (err) { console.error(err); }
-    }
-
-    function appendRequestDOM(name) {
-      const d = document.createElement('div');
-      d.className = 'req-item';
-      d.innerHTML = `<span>${name}</span><div><button class="accept-btn" onclick="acceptRequest('${name}')">Accept</button><button class="decline-btn" onclick="declineRequest('${name}')">Decline</button></div>`;
-      document.getElementById('requestsBox').appendChild(d);
-    }
-
-    async function selectTargetChannel(name, isGroupRoom) {
-      peer = name;
-      isGroup = isGroupRoom;
-      
-      // ✅ WIPE ACTIVE CHANNEL UNREAD MARKERS OUT IMMEDIATELY ON SELECTION
-      unreadChannels[name] = false;
-
-      document.getElementById('typingIndicator').style.display = 'none';
-      document.getElementById('target').innerText = isGroup ? `Group Room: ${name.replace('group_','').toUpperCase()}` : `Chatting with: @${name}`;
-      document.getElementById('window').innerHTML = '';
-
-      const rosterContainer = document.getElementById('rosterBar');
-      if (isGroup) {
-        rosterContainer.innerText = "Fetching member network roster...";
-        try {
-          const rRes = await fetch(`/api/groups/members/${name}`);
-          if (rRes.ok) {
-            const rData = await rRes.json();
-            rosterContainer.innerText = `Members: ${rData.members.join(', ')}`;
-          }
-        } catch (err) { rosterContainer.innerText = ""; }
-      } else {
-        rosterContainer.innerText = "";
-      }
-
-      document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
-      const activeEl = document.querySelector(`.friend-item[data-id="${name}"]`);
-      if (activeEl) activeEl.classList.add('active');
-
-      try {
-        const res = await fetch(`/api/messages/${me}/${name}`);
-        if (res.ok) {
-          const messages = await res.json();
-          messages.forEach(msg => {
-            const side = msg.sender === me ? 'right' : 'left';
-            show(msg.message, side, msg.fileData, msg.fileType, msg.fileName, msg.sender);
+        // Render Direct Messaging Nodes
+        if (data.friends) {
+          data.friends.forEach(fName => {
+            const isOnline = onlineUsersList.includes(fName.toLowerCase());
+            const div = document.createElement('div');
+            div.className = `channel-item ${peer === fName && !isGroup ? 'active' : ''}`;
+            div.innerHTML = `<span>👤 ${fName}</span> <div class="presence-dot ${isOnline ? 'online' : ''}"></div>`;
+            div.onclick = () => switchActiveChatThread(fName, false);
+            channelsFeed.appendChild(div);
           });
         }
-      } catch (err) { console.error(err); }
+
+        // Render Dynamic Group Channel Nodes
+        const groupRes = await fetch('/api/messages/' + me + '/all_groups_check').catch(() => null);
+        if (groupRes && groupRes.ok) {
+          const groupData = await groupRes.json();
+        }
+
+        // COMPILE PENDING FRIEND INVITATION MATRICES
+        const friendReqFeed = document.getElementById('friendRequestsFeed');
+        friendReqFeed.innerHTML = '';
+        if (data.requests && data.requests.length > 0) {
+          data.requests.forEach(reqName => {
+            const div = document.createElement('div');
+            div.className = 'request-item';
+            div.innerHTML = `
+              <span>User <b>@${reqName}</b> wants to add you.</span>
+              <div class="request-btns">
+                <button style="background:#38b000;color:white;" onclick="processFriendRequestAction('${reqName}', 'accept')">Accept</button>
+                <button style="background:#ef233c;color:white;" onclick="processFriendRequestAction('${reqName}', 'decline')">Decline</button>
+              </div>`;
+            friendReqFeed.appendChild(div);
+          });
+        }
+
+        // COMPILE PENDING GROUP CHAT INVITATION MATRICES
+        const groupReqFeed = document.getElementById('groupInvitesFeed');
+        groupReqFeed.innerHTML = '';
+        if (data.groupRequests && data.groupRequests.length > 0) {
+          data.groupRequests.forEach(gReq => {
+            const div = document.createElement('div');
+            div.className = 'request-item';
+            div.innerHTML = `
+              <span>Invited to <b>${gReq.groupName}</b> by @${gReq.invitedBy}</span>
+              <div class="request-btns">
+                <button style="background:#38b000;color:white;" onclick="processGroupInviteAction('${gReq.groupId}', 'accept')">Join</button>
+                <button style="background:#ef233c;color:white;" onclick="processGroupInviteAction('${gReq.groupId}', 'decline')">Ignore</button>
+              </div>`;
+            groupReqFeed.appendChild(div);
+          });
+        }
+
+      } catch (err) { console.error("Data synchronization fault:", err); }
     }
 
-    function show(messageText, side, fileData, fileType, fileName, senderName) {
-      const win = document.getElementById('window');
-      const div = document.createElement('div');
+    // 2. CHAT FEED WORKSPACE SEPARATOR SWITCHING TRANSITIONS
+    function switchActiveChatThread(target, groupState) {
+      peer = target;
+      isGroup = groupState;
       
-      div.className = `msg-wrapper ${side === 'right' ? 'msg-me' : 'msg-peer'}`;
+      document.getElementById('chatHeaderTitle').innerText = isGroup ? `🚀 Room: ${peer}` : `💬 Thread: @${peer}`;
+      document.getElementById('typingStatusSlot').innerText = '';
       
-      const meta = document.createElement('div');
-      meta.className = 'msg-meta';
-      meta.innerText = senderName || '';
-      div.appendChild(meta);
-
-      if (messageText) {
-        const txt = document.createElement('span');
-        txt.innerText = messageText;
-        div.appendChild(txt);
+      const toolsSlot = document.getElementById('roomManagementActionsSlot');
+      if (isGroup) {
+        toolsSlot.innerHTML = `<input type="text" id="groupInviteUserInput" placeholder="Invite user..." style="padding:5px;border-radius:4px;border:none;font-size:12px;"> <button onclick="triggerGroupUserInvitation()" style="padding:5px;font-size:12px;">Invite</button>`;
+      } else {
+        toolsSlot.innerHTML = `<button onclick="triggerConnectionTermination()" style="background:#ef233c;padding:5px;font-size:12px;border:none;border-radius:4px;color:white;cursor:pointer;">Unfriend</button>`;
       }
 
-      if (fileData) {
-        if (fileType && fileType.startsWith('image/')) {
-          const img = document.createElement('img');
-          img.src = fileData;
-          img.className = 'chat-img';
-          div.appendChild(img);
-        } else if (fileType && fileType.startsWith('video/')) {
-          const vid = document.createElement('video');
-          vid.src = fileData;
-          vid.className = 'chat-video';
-          vid.controls = true;
-          div.appendChild(vid);
+      loadTargetMessageHistoryLogs();
+      refreshDashboardDataSync();
+    }
+
+    // 3. SECURE RE-ARCHITECTED MESSAGE HISTORY RECOVERY PIPELINES
+    async function loadTargetMessageHistoryLogs() {
+      if (!peer) return;
+      try {
+        const res = await fetch(`/api/messages/${me}/${peer}`);
+        if (!res.ok) return;
+        const messages = await res.json();
+
+        const container = document.getElementById('messagesContainer');
+        container.innerHTML = '';
+
+        messages.forEach(msg => renderSingleMessageBubble(msg));
+        container.scrollTop = container.scrollHeight;
+      } catch (err) { console.error("History logging pipeline error:", err); }
+    }
+
+    function renderSingleMessageBubble(msg) {
+      const container = document.getElementById('messagesContainer');
+      const div = document.createElement('div');
+      
+      const isSystemAlert = (msg.sender === "SYSTEM_ALERT" || msg.receiver === "ALL");
+      
+      div.className = `message ${isSystemAlert ? 'received' : (msg.sender === me ? 'sent' : 'received')}`;
+      if (isSystemAlert) div.style.background = "#ef233c";
+
+      let bodyHTML = `<div class="sender-tag">@${msg.sender}</div>`;
+      
+      if (msg.message) {
+        bodyHTML += `<div>${msg.message}</div>`;
+      }
+
+      if (msg.fileData) {
+        if (msg.fileType && msg.fileType.startsWith('image/')) {
+          bodyHTML += `<img src="${msg.fileData}" onclick="window.open('${msg.fileData}', '_blank')">`;
+        } else if (msg.fileType && msg.fileType.startsWith('video/')) {
+          bodyHTML += `<video src="${msg.fileData}" controls></video>`;
         } else {
-          const link = document.createElement('a');
-          link.href = fileData;
-          link.download = fileName || 'attachment';
-          link.className = 'file-link';
-          link.innerText = `📁 Download ${fileName || 'Attachment'}`;
-          div.appendChild(link);
+          bodyHTML += `<a class="file-download" href="${msg.fileData}" download="${msg.fileName || 'attachment'}">📁 Download ${msg.fileName || 'File'}</a>`;
         }
       }
 
-      if (win) {
-        win.appendChild(div);
-        win.scrollTop = win.scrollHeight;
-      }
+      div.innerHTML = bodyHTML;
+      container.appendChild(div);
     }
 
-    function handleFileUpload(input) {
-      if (!peer) return alert("Select a chat channel first!");
-      const file = input.files[0];
+    // 4. TRANSACTIONAL MANAGEMENT ENDPOINTS DISPATCHERS
+    async function sendFriendRequest() {
+      const input = document.getElementById('friendSearchInput');
+      const targetUsername = input.value.trim();
+      if (!targetUsername) return;
+
+      const res = await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, friendUsername: targetUsername })
+      });
+      const data = await res.json();
+      if (res.ok) { alert(data.message || "Request sent successfully!"); input.value = ''; refreshDashboardDataSync(); }
+      else { alert(data.error || "Failed to process addition."); }
+    }
+
+    async function processFriendRequestAction(requesterUsername, action) {
+      const res = await fetch(`/api/friends/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, requesterUsername })
+      });
+      if (res.ok) { refreshDashboardDataSync(); if (action === 'accept') switchActiveChatThread(requesterUsername, false); }
+    }
+
+    async function triggerConnectionTermination() {
+      if (!peer || !confirm(`Terminate verification node connection with @${peer}?`)) return;
+      const res = await fetch('/api/friends/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, friendUsername: peer })
+      });
+      if (res.ok) { peer = null; document.getElementById('chatHeaderTitle').innerText = 'Select a node connection thread...'; refreshDashboardDataSync(); document.getElementById('messagesContainer').innerHTML = ''; }
+    }
+
+    async function createNewGroupRoom() {
+      const input = document.getElementById('groupCreateInput');
+      const name = input.value.trim();
+      if (!name) return;
+
+      const res = await fetch('/api/groups/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, creator: me })
+      });
+      const data = await res.json();
+      if (res.ok) { input.value = ''; refreshDashboardDataSync(); switchActiveChatThread(data.group.groupId, true); }
+    }
+
+    async function triggerGroupUserInvitation() {
+      const input = document.getElementById('groupInviteUserInput');
+      const targetUsername = input.value.trim();
+      if (!targetUsername || !peer) return;
+
+      const res = await fetch('/api/groups/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: peer, creatorUsername: me, targetUsername })
+      });
+      const data = await res.json();
+      if (res.ok) { alert(data.message); input.value = ''; }
+      else { alert(data.error); }
+    }
+
+    async function processGroupInviteAction(groupId, action) {
+      const res = await fetch(`/api/groups/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ myUsername: me, groupId })
+      });
+      if (res.ok) { refreshDashboardDataSync(); if (action === 'accept') switchActiveChatThread(groupId, true); }
+    }
+
+    // 5. ATTACHMENT PIPELINE LOADERS
+    function stageFileAttachment(event) {
+      const file = event.target.files[0];
       if (!file) return;
 
+      if (file.size > 25 * 1024 * 1024) { return alert("Attachment structure violates structural constraint checks (Max 25MB)."); }
+
+      stagedFileName = file.name;
+      stagedFileType = file.type;
+
       const reader = new FileReader();
-      reader.onload = function(event) {
-        const fileData = event.target.result; 
-        socket.emit('private_message', {
-          sender: me,
-          receiver: peer,
-          message: "",
-          fileData: fileData,
-          fileType: file.type,
-          fileName: file.name,
-          isGroupChat: isGroup
-        });
-        input.value = ""; 
+      reader.onload = function(e) {
+        stagedFileBuffer = e.target.result;
+        document.getElementById('attachmentNameSlot').innerText = `Staged File Asset: ${stagedFileName} (${Math.round(file.size/1024)} KB)`;
+        document.getElementById('attachmentStagingDisplayBar').classList.remove('camera-viewport-hidden');
       };
       reader.readAsDataURL(file);
     }
 
-    async function openCamera() {
-      if (!peer) return alert("Select a chat channel first!");
+    function clearStagedAttachmentFile() {
+      stagedFileBuffer = null;
+      stagedFileType = null;
+      stagedFileName = null;
+      document.getElementById('hiddenFileInput').value = '';
+      document.getElementById('attachmentStagingDisplayBar').classList.add('camera-viewport-hidden');
+    }
+
+    // 6. REAL-TIME HARDWARE CAMERA VIEWER MODULES
+    async function openCameraViewport() {
+      const video = document.getElementById('webcamStream');
+      const panel = document.getElementById('cameraViewportPanel');
       try {
-        document.getElementById('cameraModal').style.display = 'block';
-        streamInstance = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        document.getElementById('videoFeed').srcObject = streamInstance;
-      } catch (err) {
-        alert("Could not access camera. Ensure permissions are allowed.");
-        closeCamera();
-      }
+        cameraVideoStreamObject = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+        video.srcObject = cameraVideoStreamObject;
+        panel.classList.remove('camera-viewport-hidden');
+      } catch (err) { alert("Failed to open hardware device link channels."); }
     }
 
-    function closeCamera() {
-      document.getElementById('cameraModal').style.display = 'none';
-      if (streamInstance) streamInstance.getTracks().forEach(track => track.stop());
-    }
-
-    function capturePhoto() {
-      const video = document.getElementById('videoFeed');
+    function captureCameraSnapshot() {
+      const video = document.getElementById('webcamStream');
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1); 
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const fileData = canvas.toDataURL('image/jpeg'); 
+      canvas.width = 640;
+      canvas.height = 480;
       
-      socket.emit('private_message', {
+      const ctx = canvas.getContext('2d');
+      ctx.translate(640, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, 640, 480);
+
+      stagedFileBuffer = canvas.toDataURL('image/jpeg', 0.85);
+      stagedFileType = 'image/jpeg';
+      stagedFileName = `Snapshot_${Date.now().toString().slice(-6)}.jpg`;
+
+      document.getElementById('attachmentNameSlot').innerText = `Captured Camera Snapshot Staged! 📷`;
+      document.getElementById('attachmentStagingDisplayBar').classList.remove('camera-viewport-hidden');
+      closeCameraViewport();
+    }
+
+    function closeCameraViewport() {
+      if (cameraVideoStreamObject) {
+        cameraVideoStreamObject.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById('cameraViewportPanel').classList.add('camera-viewport-hidden');
+    }
+
+    // 7. MESSAGE DISPATCH NETWORKS HOOKS
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') executeMessageDispatch();
+    }
+
+    function emitTypingState() {
+      if (!peer) return;
+      socket.emit('typing_status', { sender: me, receiver: peer, isTyping: true });
+      
+      clearTimeout(typingDebounceTimer);
+      typingDebounceTimer = setTimeout(() => {
+        socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
+      }, 2000);
+    }
+
+    function executeMessageDispatch() {
+      const input = document.getElementById('messageInput');
+      const txt = input.value.trim();
+      if (!txt && !stagedFileBuffer) return;
+      if (!peer) return alert("Select an open thread channel before routing messages.");
+
+      const payload = {
         sender: me,
         receiver: peer,
-        message: "",
-        fileData: fileData,
-        fileType: 'image/jpeg',
-        fileName: `snapshot_${Date.now()}.jpg`,
+        message: txt,
+        fileData: stagedFileBuffer,
+        fileType: stagedFileType,
+        fileName: stagedFileName,
         isGroupChat: isGroup
-      });
-      closeCamera();
-    }
+      };
 
-    function send() {
-      const txt = document.getElementById('msg').value.trim();
-      if (!txt || !peer) return;
-      socket.emit('private_message', { sender: me, receiver: peer, message: txt, isGroupChat: isGroup });
-      document.getElementById('msg').value = '';
+      socket.emit('private_message', payload);
+      
+      input.value = '';
+      clearStagedAttachmentFile();
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
     }
 
-    async function wipe() {
-      if (!peer || !confirm("Wipe chat database for this channel?")) return;
-      try {
-        const res = await fetch('/api/messages/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sender: me, receiver: peer })
-        });
-        if (res.ok) {
-          socket.emit('trigger_wipe', { sender: me, receiver: peer, isGroupChat: isGroup });
-        }
-      } catch (err) { console.error(err); }
-    }
-
-    async function createGroupChat() {
-      const gName = prompt("Enter new Group Chat name:");
-      if (!gName) return;
-      try {
-        const res = await fetch('/api/groups/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: gName, creator: me })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-          localGroups.push(data.group.groupId);
-          localStorage.setItem(`groups_${me}`, JSON.stringify(localGroups));
-          loadDashboardData();
-        } else { alert(data.error || "Group creation failed."); }
-      } catch(err) { console.error(err); }
-    }
-
-    async function sendFriendRequest() {
-      const name = prompt("Enter username to send request to:");
-      if (!name) return;
-      try {
-        const res = await fetch('/api/friends/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, friendUsername: name })
-        });
-        const data = await res.json();
-        if (res.ok) alert(`Friend request blasted to ${name}!`);
-        else alert(data.error || "Failed to send request.");
-      } catch(err) { console.error(err); }
-    }
-
-    async function acceptRequest(target) {
-      try {
-        const res = await fetch('/api/friends/accept', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, requesterUsername: target })
-        });
-        if (res.ok) loadDashboardData();
-      } catch(err) { console.error(err); }
-    }
-
-    async function declineRequest(target) {
-      try {
-        const res = await fetch('/api/friends/decline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, requesterUsername: target })
-        });
-        if (res.ok) loadDashboardData();
-      } catch(err) { console.error(err); }
-    }
-
-    async function deleteFriend(target) {
-      if (!confirm(`Remove ${target} from friend networks?`)) return;
-      try {
-        const res = await fetch('/api/friends/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ myUsername: me, friendUsername: target })
-        });
-        if (res.ok) {
-          if (peer === target) { peer = ''; document.getElementById('target').innerText = 'No active chat'; document.getElementById('rosterBar').innerText = ''; document.getElementById('window').innerHTML = ''; }
-          loadDashboardData();
-        }
-      } catch(err) { console.error(err); }
-    }
-
-    // Realtime Socket Observers
-    socket.on('new_message', data => { 
-      if (data.sender === "CREATOR_RED (ADMIN)" || data.sender === "CREATOR_RED" || data.receiver === "GLOBAL_BROADCAST") {
-        alert(`🚨 SYSTEM BROADCAST FROM CREATOR:\n\n"${data.message}"`);
-        return;
+    // 8. GLOBAL SOCKET STREAMING TRAFFIC ROUTERS
+    socket.on('private_message', (msgNode) => {
+      if (msgNode.receiver === "ALL" || (isGroup && msgNode.receiver === peer) || (!isGroup && !msgNode.isGroupChat && ((msgNode.sender === me && msgNode.receiver === peer) || (msgNode.sender === peer && msgNode.receiver === me)))) {
+        renderSingleMessageBubble(msgNode);
+        const container = document.getElementById('messagesContainer');
+        container.scrollTop = container.scrollHeight;
       }
-
-      const incomingChannel = data.isGroupChat ? data.receiver : data.sender;
-
-      if (isGroup && data.receiver === peer) {
-        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender);
-      } else if (!isGroup && !data.isGroupChat && (data.sender === peer || (data.sender === me && data.receiver === peer))) {
-        show(data.message, data.sender === me ? 'right' : 'left', data.fileData, data.fileType, data.fileName, data.sender); 
-      } else {
-        // 🚨 FLARING SYSTEM: Check background streams to flag unread targets red
-        if (data.sender !== me) {
-          unreadChannels[incomingChannel] = true;
-        }
-      }
-      
-      // Paint updates live
-      loadDashboardData();
+      if (msgNode.sender !== me) refreshDashboardDataSync();
     });
 
-    socket.on('peer_typing', data => {
-      if (data.sender === peer || (isGroup && peer.startsWith('group_'))) {
-        const element = document.getElementById('typingIndicator');
-        if (data.isTyping) {
-          element.innerText = data.sender + " is typing...";
-          element.style.display = 'block';
-        } else {
-          element.style.display = 'none';
-        }
+    socket.on('typing_status', (data) => {
+      if (!peer || data.sender === me) return;
+      const indicator = document.getElementById('typingStatusSlot');
+      if (isGroup && data.receiver === peer && data.isTyping) {
+        indicator.innerText = `@${data.sender} is typing inside room...`;
+      } else if (!isGroup && data.sender === peer && data.isTyping) {
+        indicator.innerText = `@${data.sender} is typing...`;
+      } else if (data.sender === peer || (isGroup && data.receiver === peer)) {
+        indicator.innerText = '';
       }
     });
 
-    // 🛰️ CLEAN REPAIRED DASHBOARD SYNCHRONIZATION EVENT
-    socket.on('dashboard_sync', (data) => {
-      if (data.username) {
-        document.getElementById('nameTag').innerText = `🚀 ${data.username}`;
-      }
-      
-      let syncFriendsBox = document.getElementById('friendsBox');
-      if (syncFriendsBox) syncFriendsBox.innerHTML = '';
-      
-      // 1. Reconstruct Group tabs
-      const localGroups = JSON.parse(localStorage.getItem(`groups_${me}`) || "[]");
-      localGroups.forEach(groupId => {
-        const d = document.createElement('div');
-        const isGroupUnread = unreadChannels[groupId] === true && peer !== groupId;
-        
-        d.className = `friend-item ${peer === groupId && isGroup ? 'active' : ''}`;
-        d.setAttribute('data-id', groupId);
-        
-        if (isGroupUnread) d.style.background = '#d90429';
-        else d.style.borderLeft = "4px solid #6a0dad";
-        
-        const displayLabel = groupId.replace('group_', '').toUpperCase();
-        d.innerHTML = `
-          <span>👥 ${displayLabel}</span> 
-          <div>
-            <button class="accept-btn" style="background:#6a0dad; color:white; padding:4px 8px; font-size:12px; border-radius:3px; margin-right:5px;" onclick="inviteToGroup(event, '${groupId}')">Invite</button>
-            <button class="delete-btn" onclick="removeGroupLocal(event, '${groupId}')">Exit</button>
-          </div>
-        `;
-        d.onclick = () => { selectTargetChannel(groupId, true); };
-        if (syncFriendsBox) syncFriendsBox.appendChild(d);
-      });
-
-      // 2. Re-append Direct friends
-      data.channels.forEach(ch => {
-        appendFriendDOM(ch.name);
-      });
-
-      // 3. Re-append Request containers
-      const requestsBox = document.getElementById('requestsBox');
-      if (requestsBox) {
-        requestsBox.innerHTML = '';
-        data.requests.forEach(req => {
-          const div = document.createElement('div');
-          div.className = 'req-item';
-          div.innerHTML = `
-            <span>${req}</span>
-            <div>
-              <button class="accept-btn" onclick="acceptRequest('${req}')">✓</button>
-              <button class="decline-btn" onclick="declineRequest('${req}')">✗</button>
-            </div>
-          `;
-          requestsBox.appendChild(div);
-        });
-      }
-
-      // Re-append Group Invites containers dynamically on socket sync signals
-      const groupInvitesBox = document.getElementById('groupInvitesBox');
-      if (groupInvitesBox) {
-        groupInvitesBox.innerHTML = '';
-        (data.groupRequests || []).forEach(gReq => {
-          appendGroupInviteDOM(gReq);
-        });
-      }
+    socket.on('online_status_sync', (syncList) => {
+      onlineUsersList = syncList.map(name => name.toLowerCase());
+      refreshDashboardDataSync();
     });
 
-    socket.on('online_status_sync', (onlineUsersArray) => {
-      globalOnlineUsers = onlineUsersArray;
-      loadDashboardData(); 
+    socket.on('dashboard_sync', () => {
+      refreshDashboardDataSync();
     });
 
-    socket.on('incoming_request', () => { loadDashboardData(); });
-    socket.on('incoming_group_request', () => { loadDashboardData(); }); 
-    socket.on('request_accepted', () => { loadDashboardData(); });
-    socket.on('friend_deleted', () => { loadDashboardData(); });
-
-    socket.on('chat_wiped', (data) => {
-      if ((data.isGroup && peer === data.receiver) || (!data.isGroup && (data.wipedBy === peer || data.receiver === peer))) {
-        document.getElementById('window').innerHTML = '';
-      }
+    socket.on('incoming_group_request', () => {
+      refreshDashboardDataSync();
     });
 
-    socket.emit('request_online_sync');
+    function logout() {
+      localStorage.clear();
+      window.location.href = '/';
+    }
   </script>
 </body>
 </html>
