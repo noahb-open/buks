@@ -32,12 +32,14 @@ mongoose.connect(process.env.MONGO_URI)
 // Global dynamic presence mapping matrix tracker
 let onlineUsers = new Map(); 
 
-// Configure secure transactional email transport engine
+// Configure secure MailerSend Transactional Email SMTP Transport Engine
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.mailersend.net',
+  port: 587,
+  secure: false, // Upgrades to secure STARTTLS automatically
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    user: process.env.EMAIL_USER, // Your long MailerSend Username token
+    pass: process.env.EMAIL_PASS  // Your long MailerSend Password key
   }
 });
 
@@ -121,37 +123,44 @@ app.get('/admin/terminal', requireAdminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator.html'));
 });
 
-// 1. SIGN UP ROUTE (BYPASSES EMAIL - AUTO-VERIFIES INSTANTLY)
+// 1. SIGN UP ROUTE WITH REAL-TIME EMAIL VERIFICATION CODES (MAILERSEND INTEGRATED)
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, email, password } = req.body;
     const cleanUser = username.trim().toLowerCase();
     const cleanEmail = email.trim().toLowerCase();
 
-    // Prevent duplicate entries
     const existing = await User.findOne({ $or: [{ email: cleanEmail }, { username: cleanUser }] });
     if (existing) return res.status(400).json({ error: 'Username or Email already taken' });
 
+    const dynamicTokenCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Accounts are marked verified immediately
     const newUser = new User({ 
       username: cleanUser, 
       email: cleanEmail, 
       password: hashedPassword, 
-      isVerified: true, 
-      verificationCode: null, 
+      verificationCode: dynamicTokenCode, 
       friends: [], 
       requests: [], 
       groupRequests: [] 
     });
     await newUser.save();
 
-    res.status(201).json({ message: 'User created and verified successfully!' });
-  } catch (err) { 
-    res.status(500).json({ error: err.message }); 
-  }
-});
+    // Configured to route correctly through MailerSend authorized trial sandboxes
+    const mailOptions = {
+      from: `"Blue Rocket Core" <messa@test-dnvo4d9wk8xg5r86.mlsender.net>`,
+      to: cleanEmail,
+      subject: '🚀 Your Blue Rocket Access Key Token',
+      text: `Your 6-digit registration launch passcode is: ${dynamicTokenCode}.`,
+      html: `
+        <div style="font-family: sans-serif; background: #0d1b2a; color: white; padding: 25px; border-radius: 10px; max-width: 400px; margin: auto;">
+          <h2 style="color: #00b4d8; text-align: center;">Welcome to Blue Rocket 🚀</h2>
+          <div style="background: #1b263b; font-size: 28px; font-weight: bold; color: #38b000; text-align: center; padding: 15px; border-radius: 5px; letter-spacing: 5px; margin: 20px 0;">
+            ${dynamicTokenCode}
+          </div>
+        </div>`
+    };
 
     transporter.sendMail(mailOptions, (error) => {
       if (error) console.error("SMTP delivery fault:", error);
@@ -254,7 +263,7 @@ app.post('/api/friends/request', async (req, res) => {
 
     await pushDashboardSync(target.username);
     res.json({ success: true, message: "Request mapped successfully." });
-} catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/friends/accept', async (req, res) => {
