@@ -47,7 +47,8 @@
       const storedToken = localStorage.getItem('token');
       const storedUsername = localStorage.getItem('username');
       if (storedToken && storedUsername) {
-        if (storedUsername === "CREATOR_RED") {
+        // FIXED: Checks case-insensitively to prevent structural profile drops
+        if (storedUsername.toLowerCase() === "creator_red") {
           window.location.href = '/admin/terminal';
         } else {
           window.location.href = '/chat.html';
@@ -75,12 +76,13 @@
       }
     }
 
-    // HANDLE ACCOUNT REGISTRATION (AUTOMATIC VERIFICATION INTERCEPT)
+    // HANDLE ACCOUNT REGISTRATION
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('regUser').value.trim();
       const email = document.getElementById('regEmail').value.trim();
       const password = document.getElementById('regPass').value;
+      localStorage.setItem('pendingEmail', email);
 
       try {
         const res = await fetch('/api/signup', {
@@ -90,8 +92,7 @@
         });
 
         if (res.ok) {
-          alert("Registration successful! You can now log in immediately.");
-          toggleView(); // Seamlessly switches panels to the login view panel layout
+          window.location.href = '/verify.html';
         } else {
           const data = await res.json();
           alert(data.error || 'Registration failed');
@@ -101,7 +102,7 @@
       }
     });
 
-    // HANDLE LOGIN ENGINE
+    // HANDLE LOGIN ENGINE WITH INSTANT CASE-INSENSITIVE ADMIN ROUTE ROUTER
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = document.getElementById('loginEmail').value.trim();
@@ -120,7 +121,8 @@
           localStorage.setItem('token', data.token);
           localStorage.setItem('username', data.username);
           
-          if (data.username === "CREATOR_RED") {
+          // FIXED: Lowercase mapping string comparison captures admin users flawlessly
+          if (data.username.toLowerCase() === "creator_red") {
             window.location.href = '/admin/terminal';
           } else {
             window.location.href = '/chat.html';
