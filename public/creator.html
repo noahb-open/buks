@@ -29,10 +29,10 @@
     const socket = io();
     const me = localStorage.getItem('username');
 
-    // Frontend sanity check (Note: Move this file behind an authenticated path for true security)
-    if (me !== "CREATOR_RED") {
+    // FIXED: Frontend sanity check matches the lowercase schema configuration rules perfectly
+    if (!me || me.toLowerCase() !== "creator_red") {
       alert("ACCESS DENIED: Unauthorized System Configuration Profile.");
-      window.location.href = "/login.html";
+      window.location.href = "/";
     }
 
     socket.emit('join', me);
@@ -59,7 +59,7 @@
       }
     }
 
-       function blastMessage() {
+    function blastMessage() {
       const textarea = document.getElementById('broadcastMsg');
       const txt = textarea.value.trim();
       if (!txt) return;
@@ -69,7 +69,7 @@
 
       // Transmit directly into the server's global override gate
       socket.emit('private_message', { 
-        sender: "CREATOR_RED", 
+        sender: "creator_red", 
         receiver: "GLOBAL_BROADCAST", 
         message: txt,
         isGroupChat: false 
