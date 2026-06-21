@@ -29,10 +29,10 @@
     const socket = io();
     const me = localStorage.getItem('username');
 
-    // Frontend sanity check (Note: Move this file behind an authenticated path for true security)
-    if (me !== "creator_red") {
+    // FIXED: Enforces original case-sensitive validation and cleans exit routing loops
+    if (me !== "CREATOR_RED") {
       alert("ACCESS DENIED: Unauthorized System Configuration Profile.");
-      window.location.href = "/login.html";
+      window.location.href = "/";
     }
 
     socket.emit('join', me);
@@ -67,7 +67,7 @@
       const words = txt.split(/\s+/).length;
       if (words > 1000) return alert("Cannot send. Word count is too high!");
 
-      // Transmit directly into the server's global override gate
+      // FIXED: Maps parameter payloads to match your exact backend server guard block
       socket.emit('private_message', { 
         sender: "CREATOR_RED", 
         receiver: "GLOBAL_BROADCAST", 
