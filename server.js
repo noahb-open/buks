@@ -107,7 +107,8 @@ function requireAdminAuth(req, res, next) {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     User.findById(decoded.id).then(user => {
-      if (user && user.username === "CREATOR_RED") {
+      // FIXED: Strictly maps to lowercase schema output rules to prevent dashboard rejection
+      if (user && user.username === "creator_red") {
         req.user = user;
         return next();
       }
@@ -496,5 +497,3 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Engine live running on layout node port: ${PORT} ⚡`));
-
-
