@@ -3,141 +3,115 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blue Rocket - Messenger Hub</title>
+  <title>Blue Rocket - Chat Matrix</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1b2a; color: #fff; display: flex; height: 100vh; overflow: hidden; }
+    body { margin: 0; font-family: sans-serif; background-color: #0b132b; color: #fff; display: flex; height: 100vh; overflow: hidden; }
     
-    /* SIDEBAR SYSTEM PANELS */
-    .sidebar { width: 320px; background: #1b263b; display: flex; flex-direction: column; border-right: 2px solid #0d1b2a; }
-    .user-profile { padding: 20px; background: #0d1b2a; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #415a77; }
-    .user-profile span { font-weight: bold; color: #00b4d8; font-size: 16px; }
-    .action-tabs { padding: 10px 15px; background: #14213d; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #415a77; }
-    .action-tabs input { padding: 8px; border-radius: 5px; border: none; background: #e0e1dd; color: #0d1b2a; font-size: 13px; }
-    .action-tabs button { padding: 8px; border: none; border-radius: 5px; background: #0077b6; color: white; font-weight: bold; cursor: pointer; font-size: 13px; }
-    .action-tabs button:hover { background: #0096c7; }
+    /* SIDEBAR LAYOUT */
+    .sidebar { width: 280px; background: #1c2541; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; }
+    .user-profile { margin-bottom: 20px; }
+    .user-profile span { font-weight: bold; font-size: 18px; display: block; margin-bottom: 8px; color: #e0e1dd; }
+    .logout-btn { background: #ef233c; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px; }
     
-    /* SCROLLABLE FEEDS LAYER */
-    .channels-list { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-    .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #e0e1dd; opacity: 0.6; margin-top: 10px; margin-bottom: 5px; }
-    .channel-item { padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #415a77; transition: 0.2s; border-left: 4px solid transparent; }
-    .channel-item:hover { background: #778da9; transform: translateX(2px); }
-    .channel-item.active { background: #0077b6; border-left-color: #00b4d8; box-shadow: 0 4px 10px rgba(0,119,182,0.3); }
-    .presence-dot { width: 10px; height: 10px; border-radius: 50%; background: #6c757d; }
-    .presence-dot.online { background: #38b000; box-shadow: 0 0 8px #38b000; }
+    /* BUTTON INTERFACES FROM IMAGE */
+    .btn-container { display: flex; gap: 10px; margin-bottom: 25px; }
+    .add-friend-btn { flex: 1; background: #00b4d8; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .new-group-btn { flex: 1; background: #7209b7; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 4px; }
     
-    /* CARD REQUEST BADGES */
-    .request-item { padding: 10px; background: #2a3c54; border-radius: 6px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
-    .request-btns { display: flex; gap: 5px; }
-    .request-btns button { flex: 1; padding: 5px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; }
+    /* SECTION HEADERS FROM IMAGE */
+    .section-header { font-size: 15px; font-weight: bold; color: #00b4d8; margin: 18px 0 8px 0; display: flex; align-items: center; gap: 6px; }
+    .feed-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 15px; }
+    
+    .channel-item { padding: 10px; border-radius: 6px; background: #3a506b; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; transition: 0.2s; }
+    .channel-item:hover { background: #5c715e; }
+    .channel-item.active { background: #0077b6; }
+    .presence-dot { width: 8px; height: 8px; border-radius: 50%; background: #6c757d; }
+    .presence-dot.online { background: #38b000; box-shadow: 0 0 6px #38b000; }
+    
+    /* ACTION BOXES FOR REQUESTS */
+    .req-card { padding: 8px; background: #222e50; border-radius: 5px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+    .req-actions { display: flex; gap: 4px; }
+    .req-actions button { flex: 1; border: none; padding: 4px; font-size: 11px; font-weight: bold; border-radius: 3px; cursor: pointer; color: white; }
 
-    /* CORE CHAT WORKSPACE AREA */
-    .chat-area { flex: 1; display: flex; flex-direction: column; background: #0d1b2a; }
-    .chat-header { padding: 20px; background: #1b263b; border-bottom: 2px solid #0d1b2a; display: flex; justify-content: space-between; align-items: center; }
-    .chat-header .title { font-size: 18px; font-weight: bold; color: #e0e1dd; }
-    .chat-header .typing-indicator { font-size: 13px; color: #38b000; font-style: italic; min-height: 20px; }
+    /* CHAT WORKSPACE DESIGN */
+    .chat-area { flex: 1; display: flex; flex-direction: column; background: #0b132b; }
+    .chat-header { padding: 18px; background: #1c2541; border-bottom: 1px solid #3a506b; font-size: 16px; font-weight: bold; display: flex; justify-content: space-between; }
+    .typing-box { font-size: 13px; color: #38b000; font-style: italic; }
+    .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
     
-    /* MESSAGES BUBBLE DISPATCHER SYSTEM */
-    .messages-container { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-    .message { max-width: 55%; padding: 12px 18px; border-radius: 12px; word-wrap: break-all; line-height: 1.4; display: flex; flex-direction: column; gap: 5px; position: relative; animation: slideUp 0.15s ease-out; }
-    @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    .message .sender-tag { font-size: 11px; font-weight: bold; opacity: 0.7; margin-bottom: 2px; }
-    .message.sent { background: #0077b6; align-self: flex-end; border-bottom-right-radius: 2px; }
-    .message.received { background: #415a77; align-self: flex-start; border-bottom-left-radius: 2px; }
+    .message { max-width: 60%; padding: 10px 14px; border-radius: 8px; word-wrap: break-all; font-size: 15px; line-height: 1.4; display: flex; flex-direction: column; }
+    .message .sender-label { font-size: 11px; opacity: 0.6; margin-bottom: 2px; font-weight: bold; }
+    .message.sent { background: #0077b6; align-self: flex-end; }
+    .message.received { background: #3a506b; align-self: flex-start; }
+    .message img { max-width: 100%; border-radius: 4px; margin-top: 5px; }
+
+    /* BAR DESIGN */
+    .input-bar { padding: 15px; background: #1c2541; display: flex; gap: 10px; align-items: center; }
+    .media-btn { background: #e0e1dd; color: #0b132b; border: none; padding: 10px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+    input[type="text"] { flex: 1; padding: 11px; border: none; border-radius: 5px; background: #e0e1dd; color: #0b132b; font-size: 15px; outline: none; }
+    .send-btn { background: #00b4d8; color: white; border: none; padding: 11px 22px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    .wipe-btn { background: #ef233c; color: white; border: none; padding: 11px 18px; border-radius: 5px; font-weight: bold; cursor: pointer; }
     
-    /* ATTACHMENTS AND MEDIA STREAMS LAYOUTS */
-    .message img { max-width: 100%; border-radius: 8px; margin-top: 5px; cursor: pointer; transition: 0.2s; }
-    .message img:hover { filter: brightness(0.9); }
-    .message video { max-width: 100%; border-radius: 8px; margin-top: 5px; }
-    .message .file-download { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px; text-decoration: none; color: #00b4d8; font-weight: bold; font-size: 13px; margin-top: 5px; }
-
-    /* MEDIA INTERACTION ATTACHMENT BOXES */
-    .media-preview-box { padding: 10px 20px; background: #14213d; border-top: 1px solid #415a77; display: flex; justify-content: space-between; align-items: center; }
-    .camera-viewport-hidden { display: none !important; }
-    .camera-panel { width: 100%; max-width: 320px; background: #000; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; gap: 5px; padding: 10px; margin: 10px auto; border: 2px solid #0077b6; }
-    .camera-panel video { width: 100%; transform: scaleX(-1); border-radius: 4px; }
-
-    /* ENTRY INPUT CONTROLS */
-    .input-bar { padding: 20px; background: #1b263b; display: flex; align-items: center; gap: 12px; border-top: 1px solid #415a77; }
-    .input-wrapper { flex: 1; position: relative; display: flex; align-items: center; }
-    input[type="text"] { width: 100%; padding: 12px 45px 12px 15px; border: none; border-radius: 8px; background: #e0e1dd; color: #0d1b2a; font-size: 15px; outline: none; }
-    .attach-icon-btn { position: absolute; right: 12px; cursor: pointer; font-size: 20px; color: #415a77; transition: 0.2s; }
-    .attach-icon-btn:hover { color: #0077b6; }
-    .camera-trigger { font-size: 20px; cursor: pointer; color: #e0e1dd; opacity: 0.7; transition: 0.2s; }
-    .camera-trigger:hover { opacity: 1; color: #00b4d8; }
-    button.send-btn { padding: 12px 28px; border: none; border-radius: 8px; background: #38b000; color: white; font-weight: bold; cursor: pointer; font-size: 15px; transition: 0.2s; box-shadow: 0 4px 6px rgba(56,176,0,0.2); }
-    button.send-btn:hover { background: #2dc600; transform: translateY(-1px); }
+    .camera-box { width: 240px; background: #000; padding: 8px; border-radius: 6px; border: 2px solid #00b4d8; position: absolute; bottom: 80px; right: 20px; display: flex; flex-direction: column; gap: 4px; }
+    .camera-box video { width: 100%; transform: scaleX(-1); border-radius: 4px; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
 
-  <!-- LEFT SIDEBAR TRACKER MODULE -->
+  <!-- RESTORED SIDEBAR COMPONENT FROM IMAGE -->
   <div class="sidebar">
     <div class="user-profile">
-      <span id="myUsernameDisplay">@User</span>
-      <button onclick="logout()" style="background: #ef233c; padding: 6px 12px; font-size: 12px; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer;">LOGOUT</button>
+      <span id="myUsernameDisplay">🚀 User</span>
+      <button class="logout-btn" onclick="logout()">Log Out</button>
     </div>
 
-    <!-- CONTROL EXPANSION ACTION TABS -->
-    <div class="action-tabs">
-      <input type="text" id="friendSearchInput" placeholder="Enter target username...">
-      <button onclick="sendFriendRequest()">➕ Add Connection Node</button>
-      <input type="text" id="groupCreateInput" placeholder="Enter fresh group name...">
-      <button onclick="createNewGroupRoom()" style="background: #38b000;">🚀 Launch New Group</button>
+    <!-- BUTTON MATCHES -->
+    <div class="btn-container">
+      <button class="add-friend-btn" onclick="promptFriendAdd()">➕ Add Friend</button>
+      <button class="new-group-btn" onclick="promptGroupCreate()">⚡ New Group</button>
     </div>
 
-    <!-- LIVE DYNAMIC FEEDS SCROLL FRAME -->
-    <div class="channels-list">
-      <div class="section-title">Connection Matrix Channels</div>
-      <div id="activeChannelsFeed"></div>
+    <!-- FEED LISTINGS -->
+    <div class="section-header">Pending Requests ✉️</div>
+    <div class="feed-container" id="friendRequestsFeed"></div>
 
-      <div class="section-title">Pending Friend Requisitions</div>
-      <div id="friendRequestsFeed" style="display: flex; flex-direction: column; gap: 8px;"></div>
+    <div class="section-header">Group Invites 👥</div>
+    <div class="feed-container" id="groupInvitesFeed"></div>
 
-      <div class="section-title">Pending Group Invitations</div>
-      <div id="groupInvitesFeed" style="display: flex; flex-direction: column; gap: 8px;"></div>
-    </div>
+    <div class="section-header">Channels & Friends 🚀</div>
+    <div class="feed-container" id="activeChannelsFeed"></div>
   </div>
 
-  <!-- MAIN CHAT WORKSPACE CONSOLE -->
+  <!-- CHAT WINDOW -->
   <div class="chat-area">
     <div class="chat-header">
-      <div>
-        <div class="title" id="chatHeaderTitle">Select an active node thread...</div>
-        <div class="typing-indicator" id="typingStatusSlot"></div>
-      </div>
-      <!-- DYNAMIC CHANNEL MANAGEMENT TOOL -->
-      <div id="roomManagementActionsSlot"></div>
+      <div id="chatHeaderTitle">No active chat</div>
+      <div class="typing-box" id="typingStatusSlot"></div>
     </div>
-
+    
     <div class="messages-container" id="messagesContainer"></div>
 
-    <!-- CAMERA SCREEN FRAME SEPARATOR -->
-    <div class="camera-panel camera-viewport-hidden" id="cameraViewportPanel">
+    <!-- CAMERA FLOATER -->
+    <div class="camera-box hidden" id="cameraViewportPanel">
       <video id="webcamStream" autoplay playsinline></video>
-      <div style="display: flex; gap: 5px; margin-top: 5px;">
-        <button onclick="captureCameraSnapshot()" style="background: #38b000; flex: 1;">SNAPSHOT</button>
-        <button onclick="closeCameraViewport()" style="background: #ef233c; flex: 1;">CLOSE</button>
+      <div style="display: flex; gap: 4px;">
+        <button onclick="captureCameraSnapshot()" style="background:#38b000;flex:1;border:none;color:white;padding:4px;font-weight:bold;cursor:pointer;">SNAP</button>
+        <button onclick="closeCameraViewport()" style="background:#ef233c;flex:1;border:none;color:white;padding:4px;font-weight:bold;cursor:pointer;">CLOSE</button>
       </div>
     </div>
 
-    <!-- ACTIVE FILE STAGING ATTACHMENT DISPLAY BAR -->
-    <div class="media-preview-box camera-viewport-hidden" id="attachmentStagingDisplayBar">
-      <span style="font-size: 13px; color: #00b4d8;" id="attachmentNameSlot">File staged...</span>
-      <button onclick="clearStagedAttachmentFile()" style="background: #ef233c; padding: 4px 10px; font-size: 11px;">Remove</button>
-    </div>
-
-    <!-- COMPRESSION UTILITIES FOOTER BAR -->
+    <!-- FOOTER INPUT STRIP MATCHING SCREENSHOT -->
     <div class="input-bar">
-      <div class="camera-trigger" onclick="openCameraViewport()">📷</div>
+      <button class="media-btn" onclick="openCameraViewport()">📷</button>
+      <button class="media-btn" onclick="document.getElementById('hiddenFileInput').click()">📎</button>
+      <input type="file" id="hiddenFileInput" class="hidden" onchange="stageFileAttachment(event)">
       
-      <div class="input-wrapper">
-        <input type="text" id="messageInput" placeholder="Type an end-to-end routing transmission..." onkeydown="handleKeyPress(event)" oninput="emitTypingState()">
-        <label class="attach-icon-btn" for="hiddenFileInput">📎</label>
-        <input type="file" id="hiddenFileInput" style="display: none;" onchange="stageFileAttachment(event)">
-      </div>
-
-      <button class="send-btn" onclick="executeMessageDispatch()">SEND</button>
+      <input type="text" id="messageInput" placeholder="Type a message safely..." onkeydown="handleKeyPress(event)" oninput="emitTypingState()">
+      
+      <button class="send-btn" onclick="executeMessageDispatch()">Send</button>
+      <button class="wipe-btn" onclick="clearStagedAttachmentFile()" id="wipeBtn" class="hidden">Wipe</button>
     </div>
   </div>
 
@@ -149,7 +123,6 @@
     let isGroup = false;
     let onlineUsersList = [];
     
-    // Binary memory block holders for active attachment pipelines
     let stagedFileBuffer = null;
     let stagedFileType = null;
     let stagedFileName = null;
@@ -159,37 +132,32 @@
     if (!me) {
       window.location.href = '/';
     } else {
-      document.getElementById('myUsernameDisplay').innerText = `@${me}`;
+      document.getElementById('myUsernameDisplay').innerText = `🚀 ${me}`;
     }
 
-    // 🚀 NEW: INITIALIZE OUT-OF-APP EXTERNAL BACKGROUND PUSH NOTIFICATIONS
-function enableExternalPushNotifications() {
+    function enableExternalPushNotifications() {
       if (!me) return;
       const cleanTopic = `bluerocket_chat_${me.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      console.log(`System notifications subscription routing live on: https://ntfy.sh{cleanTopic}`);
+      console.log(`Push notifications routed via: https://ntfy.sh{cleanTopic}`);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
       enableExternalPushNotifications();
       socket.emit('join', me);
       refreshDashboardDataSync();
-      
-      // Request active presence tracking array
       socket.emit('request_online_sync');
     });
 
-    // 1. RE-ARCHITECTED DASHBOARD GRAPH COMPILER ENGINE LOGIC
     async function refreshDashboardDataSync() {
       try {
         const res = await fetch(`/api/friends-data/${me}`);
         if (!res.ok) return;
         const data = await res.json();
 
-        // COMPILE SYSTEM OVERRIDE CHANNELS PANEL
+        // RENDER CHANNELS FEED
         const channelsFeed = document.getElementById('activeChannelsFeed');
         channelsFeed.innerHTML = '';
         
-        // Render Direct Messaging Nodes
         if (data.friends) {
           data.friends.forEach(fName => {
             const isOnline = onlineUsersList.includes(fName.toLowerCase());
@@ -201,201 +169,135 @@ function enableExternalPushNotifications() {
           });
         }
 
-        // Render Dynamic Group Channel Nodes
-        const groupRes = await fetch('/api/messages/' + me + '/all_groups_check').catch(() => null);
-        if (groupRes && groupRes.ok) {
-          const groupData = await groupRes.json();
-        }
-
-        // COMPILE PENDING FRIEND INVITATION MATRICES
+        // RENDER PENDING FRIEND REQUESTS
         const friendReqFeed = document.getElementById('friendRequestsFeed');
         friendReqFeed.innerHTML = '';
         if (data.requests && data.requests.length > 0) {
           data.requests.forEach(reqName => {
             const div = document.createElement('div');
-            div.className = 'request-item';
+            div.className = 'req-card';
             div.innerHTML = `
-              <span>User <b>@${reqName}</b> wants to add you.</span>
-              <div class="request-btns">
-                <button style="background:#38b000;color:white;" onclick="processFriendRequestAction('${reqName}', 'accept')">Accept</button>
-                <button style="background:#ef233c;color:white;" onclick="processFriendRequestAction('${reqName}', 'decline')">Decline</button>
+              <span><b>@${reqName}</b> wants to add you</span>
+              <div class="req-actions">
+                <button style="background:#38b000;" onclick="processFriendRequestAction('${reqName}', 'accept')">Accept</button>
+                <button style="background:#ef233c;" onclick="processFriendRequestAction('${reqName}', 'decline')">Drop</button>
               </div>`;
             friendReqFeed.appendChild(div);
           });
         }
 
-        // COMPILE PENDING GROUP CHAT INVITATION MATRICES
+        // RENDER PENDING GROUP REQUESTS
         const groupReqFeed = document.getElementById('groupInvitesFeed');
         groupReqFeed.innerHTML = '';
         if (data.groupRequests && data.groupRequests.length > 0) {
           data.groupRequests.forEach(gReq => {
             const div = document.createElement('div');
-            div.className = 'request-item';
+            div.className = 'req-card';
             div.innerHTML = `
-              <span>Invited to <b>${gReq.groupName}</b> by @${gReq.invitedBy}</span>
-              <div class="request-btns">
-                <button style="background:#38b000;color:white;" onclick="processGroupInviteAction('${gReq.groupId}', 'accept')">Join</button>
-                <button style="background:#ef233c;color:white;" onclick="processGroupInviteAction('${gReq.groupId}', 'decline')">Ignore</button>
+              <span>Room <b>${gReq.groupName}</b> invitation</span>
+              <div class="req-actions">
+                <button style="background:#38b000;" onclick="processGroupInviteAction('${gReq.groupId}', 'accept')">Join</button>
+                <button style="background:#ef233c;" onclick="processGroupInviteAction('${gReq.groupId}', 'skip')">Skip</button>
               </div>`;
             groupReqFeed.appendChild(div);
           });
         }
-
-      } catch (err) { console.error("Data synchronization fault:", err); }
+      } catch (err) { console.error("Sync error:", err); }
     }
 
-    // 2. CHAT FEED WORKSPACE SEPARATOR SWITCHING TRANSITIONS
     function switchActiveChatThread(target, groupState) {
       peer = target;
       isGroup = groupState;
-      
-      document.getElementById('chatHeaderTitle').innerText = isGroup ? `🚀 Room: ${peer}` : `💬 Thread: @${peer}`;
-      document.getElementById('typingStatusSlot').innerText = '';
-      
-      const toolsSlot = document.getElementById('roomManagementActionsSlot');
-      if (isGroup) {
-        toolsSlot.innerHTML = `<input type="text" id="groupInviteUserInput" placeholder="Invite user..." style="padding:5px;border-radius:4px;border:none;font-size:12px;"> <button onclick="triggerGroupUserInvitation()" style="padding:5px;font-size:12px;">Invite</button>`;
-      } else {
-        toolsSlot.innerHTML = `<button onclick="triggerConnectionTermination()" style="background:#ef233c;padding:5px;font-size:12px;border:none;border-radius:4px;color:white;cursor:pointer;">Unfriend</button>`;
-      }
-
+      document.getElementById('chatHeaderTitle').innerText = isGroup ? `🚀 Room: ${peer}` : `💬 Chat: @${peer}`;
       loadTargetMessageHistoryLogs();
       refreshDashboardDataSync();
     }
 
-    // 3. SECURE RE-ARCHITECTED MESSAGE HISTORY RECOVERY PIPELINES
     async function loadTargetMessageHistoryLogs() {
       if (!peer) return;
       try {
         const res = await fetch(`/api/messages/${me}/${peer}`);
-        if (!res.ok) return;
         const messages = await res.json();
-
         const container = document.getElementById('messagesContainer');
         container.innerHTML = '';
-
         messages.forEach(msg => renderSingleMessageBubble(msg));
         container.scrollTop = container.scrollHeight;
-      } catch (err) { console.error("History logging pipeline error:", err); }
+      } catch (err) { console.error("History logging error:", err); }
     }
 
     function renderSingleMessageBubble(msg) {
       const container = document.getElementById('messagesContainer');
       const div = document.createElement('div');
-      
       const isSystemAlert = (msg.sender === "SYSTEM_ALERT" || msg.receiver === "ALL");
       
       div.className = `message ${isSystemAlert ? 'received' : (msg.sender === me ? 'sent' : 'received')}`;
       if (isSystemAlert) div.style.background = "#ef233c";
 
-      let bodyHTML = `<div class="sender-tag">@${msg.sender}</div>`;
-      
-      if (msg.message) {
-        bodyHTML += `<div>${msg.message}</div>`;
-      }
+      let bodyHTML = `<div class="sender-label">@${msg.sender}</div>`;
+      if (msg.message) bodyHTML += `<div>${msg.message}</div>`;
 
       if (msg.fileData) {
         if (msg.fileType && msg.fileType.startsWith('image/')) {
           bodyHTML += `<img src="${msg.fileData}" onclick="window.open('${msg.fileData}', '_blank')">`;
-        } else if (msg.fileType && msg.fileType.startsWith('video/')) {
-          bodyHTML += `<video src="${msg.fileData}" controls></video>`;
         } else {
-          bodyHTML += `<a class="file-download" href="${msg.fileData}" download="${msg.fileName || 'attachment'}">📁 Download ${msg.fileName || 'File'}</a>`;
+          bodyHTML += `<a href="${msg.fileData}" download="${msg.fileName}" style="color:#00b4d8;display:block;margin-top:5px;">📁 File: ${msg.fileName}</a>`;
         }
       }
-
       div.innerHTML = bodyHTML;
       container.appendChild(div);
     }
 
-    // 4. TRANSACTIONAL MANAGEMENT ENDPOINTS DISPATCHERS
-    async function sendFriendRequest() {
-      const input = document.getElementById('friendSearchInput');
-      const targetUsername = input.value.trim();
+    async function promptFriendAdd() {
+      const targetUsername = prompt("Enter target username connection node:");
       if (!targetUsername) return;
-
       const res = await fetch('/api/friends/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ myUsername: me, friendUsername: targetUsername })
+        body: JSON.stringify({ myUsername: me, friendUsername: targetUsername.trim() })
       });
-      const data = await res.json();
-      if (res.ok) { alert(data.message || "Request sent successfully!"); input.value = ''; refreshDashboardDataSync(); }
-      else { alert(data.error || "Failed to process addition."); }
+      if (res.ok) { alert("Connection request staged!"); refreshDashboardDataSync(); }
+    }
+
+    async function promptGroupCreate() {
+      const name = prompt("Enter fresh group channel title:");
+      if (!name) return;
+      const res = await fetch('/api/groups/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), creator: me })
+      });
+      if (res.ok) refreshDashboardDataSync();
     }
 
     async function processFriendRequestAction(requesterUsername, action) {
-      const res = await fetch(`/api/friends/${action}`, {
+      await fetch(`/api/friends/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ myUsername: me, requesterUsername })
       });
-      if (res.ok) { refreshDashboardDataSync(); if (action === 'accept') switchActiveChatThread(requesterUsername, false); }
-    }
-
-    async function triggerConnectionTermination() {
-      if (!peer || !confirm(`Terminate verification node connection with @${peer}?`)) return;
-      const res = await fetch('/api/friends/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ myUsername: me, friendUsername: peer })
-      });
-      if (res.ok) { peer = null; document.getElementById('chatHeaderTitle').innerText = 'Select a node connection thread...'; refreshDashboardDataSync(); document.getElementById('messagesContainer').innerHTML = ''; }
-    }
-
-    async function createNewGroupRoom() {
-      const input = document.getElementById('groupCreateInput');
-      const name = input.value.trim();
-      if (!name) return;
-
-      const res = await fetch('/api/groups/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, creator: me })
-      });
-      const data = await res.json();
-      if (res.ok) { input.value = ''; refreshDashboardDataSync(); switchActiveChatThread(data.group.groupId, true); }
-    }
-
-    async function triggerGroupUserInvitation() {
-      const input = document.getElementById('groupInviteUserInput');
-      const targetUsername = input.value.trim();
-      if (!targetUsername || !peer) return;
-
-      const res = await fetch('/api/groups/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: peer, creatorUsername: me, targetUsername })
-      });
-      const data = await res.json();
-      if (res.ok) { alert(data.message); input.value = ''; }
-      else { alert(data.error); }
+      refreshDashboardDataSync();
     }
 
     async function processGroupInviteAction(groupId, action) {
-      const res = await fetch(`/api/groups/${action}`, {
+      await fetch(`/api/groups/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ myUsername: me, groupId })
       });
-      if (res.ok) { refreshDashboardDataSync(); if (action === 'accept') switchActiveChatThread(groupId, true); }
+      refreshDashboardDataSync();
     }
 
-    // 5. ATTACHMENT PIPELINE LOADERS
     function stageFileAttachment(event) {
       const file = event.target.files[0];
       if (!file) return;
-
-      if (file.size > 25 * 1024 * 1024) { return alert("Attachment structure violates structural constraint checks (Max 25MB)."); }
-
       stagedFileName = file.name;
       stagedFileType = file.type;
 
       const reader = new FileReader();
       reader.onload = function(e) {
         stagedFileBuffer = e.target.result;
-        document.getElementById('attachmentNameSlot').innerText = `Staged File Asset: ${stagedFileName} (${Math.round(file.size/1024)} KB)`;
-        document.getElementById('attachmentStagingDisplayBar').classList.remove('camera-viewport-hidden');
+        document.getElementById('wipeBtn').classList.remove('hidden');
+        alert(`Staged file: ${stagedFileName}`);
       };
       reader.readAsDataURL(file);
     }
@@ -405,48 +307,38 @@ function enableExternalPushNotifications() {
       stagedFileType = null;
       stagedFileName = null;
       document.getElementById('hiddenFileInput').value = '';
-      document.getElementById('attachmentStagingDisplayBar').classList.add('camera-viewport-hidden');
+      document.getElementById('wipeBtn').classList.add('hidden');
     }
 
-    // 6. REAL-TIME HARDWARE CAMERA VIEWER MODULES
     async function openCameraViewport() {
       const video = document.getElementById('webcamStream');
-      const panel = document.getElementById('cameraViewportPanel');
       try {
-        cameraVideoStreamObject = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+        cameraVideoStreamObject = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         video.srcObject = cameraVideoStreamObject;
-        panel.classList.remove('camera-viewport-hidden');
-      } catch (err) { alert("Failed to open hardware device link channels."); }
+        document.getElementById('cameraViewportPanel').classList.remove('hidden');
+      } catch (err) { alert("Hardware links busy."); }
     }
 
     function captureCameraSnapshot() {
       const video = document.getElementById('webcamStream');
       const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
-      
+      canvas.width = 640; canvas.height = 480;
       const ctx = canvas.getContext('2d');
-      ctx.translate(640, 0);
-      ctx.scale(-1, 1);
+      ctx.translate(640, 0); ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0, 640, 480);
 
-      stagedFileBuffer = canvas.toDataURL('image/jpeg', 0.85);
+      stagedFileBuffer = canvas.toDataURL('image/jpeg', 0.8);
       stagedFileType = 'image/jpeg';
-      stagedFileName = `Snapshot_${Date.now().toString().slice(-6)}.jpg`;
-
-      document.getElementById('attachmentNameSlot').innerText = `Captured Camera Snapshot Staged! 📷`;
-      document.getElementById('attachmentStagingDisplayBar').classList.remove('camera-viewport-hidden');
+      stagedFileName = `Snap_${Date.now().toString().slice(-4)}.jpg`;
+      document.getElementById('wipeBtn').classList.remove('hidden');
       closeCameraViewport();
     }
 
     function closeCameraViewport() {
-      if (cameraVideoStreamObject) {
-        cameraVideoStreamObject.getTracks().forEach(track => track.stop());
-      }
-      document.getElementById('cameraViewportPanel').classList.add('camera-viewport-hidden');
+      if (cameraVideoStreamObject) cameraVideoStreamObject.getTracks().forEach(t => t.stop());
+      document.getElementById('cameraViewportPanel').classList.add('hidden');
     }
 
-    // 7. MESSAGE DISPATCH NETWORKS HOOKS
     function handleKeyPress(e) {
       if (e.key === 'Enter') executeMessageDispatch();
     }
@@ -454,7 +346,6 @@ function enableExternalPushNotifications() {
     function emitTypingState() {
       if (!peer) return;
       socket.emit('typing_status', { sender: me, receiver: peer, isTyping: true });
-      
       clearTimeout(typingDebounceTimer);
       typingDebounceTimer = setTimeout(() => {
         socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
@@ -465,26 +356,18 @@ function enableExternalPushNotifications() {
       const input = document.getElementById('messageInput');
       const txt = input.value.trim();
       if (!txt && !stagedFileBuffer) return;
-      if (!peer) return alert("Select an open thread channel before routing messages.");
+      if (!peer) return alert("Select an open connection thread first.");
 
-      const payload = {
-        sender: me,
-        receiver: peer,
-        message: txt,
-        fileData: stagedFileBuffer,
-        fileType: stagedFileType,
-        fileName: stagedFileName,
+      socket.emit('private_message', {
+        sender: me, receiver: peer, message: txt,
+        fileData: stagedFileBuffer, fileType: stagedFileType, fileName: stagedFileName,
         isGroupChat: isGroup
-      };
-
-      socket.emit('private_message', payload);
+      });
       
       input.value = '';
       clearStagedAttachmentFile();
-      socket.emit('typing_status', { sender: me, receiver: peer, isTyping: false });
     }
 
-    // 8. GLOBAL SOCKET STREAMING TRAFFIC ROUTERS
     socket.on('private_message', (msgNode) => {
       if (msgNode.receiver === "ALL" || (isGroup && msgNode.receiver === peer) || (!isGroup && !msgNode.isGroupChat && ((msgNode.sender === me && msgNode.receiver === peer) || (msgNode.sender === peer && msgNode.receiver === me)))) {
         renderSingleMessageBubble(msgNode);
@@ -497,11 +380,9 @@ function enableExternalPushNotifications() {
     socket.on('typing_status', (data) => {
       if (!peer || data.sender === me) return;
       const indicator = document.getElementById('typingStatusSlot');
-      if (isGroup && data.receiver === peer && data.isTyping) {
-        indicator.innerText = `@${data.sender} is typing inside room...`;
-      } else if (!isGroup && data.sender === peer && data.isTyping) {
+      if (data.sender === peer && data.isTyping) {
         indicator.innerText = `@${data.sender} is typing...`;
-      } else if (data.sender === peer || (isGroup && data.receiver === peer)) {
+      } else if (data.sender === peer) {
         indicator.innerText = '';
       }
     });
@@ -511,13 +392,7 @@ function enableExternalPushNotifications() {
       refreshDashboardDataSync();
     });
 
-    socket.on('dashboard_sync', () => {
-      refreshDashboardDataSync();
-    });
-
-    socket.on('incoming_group_request', () => {
-      refreshDashboardDataSync();
-    });
+    socket.on('dashboard_sync', () => refreshDashboardDataSync());
 
     function logout() {
       localStorage.clear();
