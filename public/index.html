@@ -47,9 +47,9 @@
       const storedToken = localStorage.getItem('token');
       const storedUsername = localStorage.getItem('username');
       if (storedToken && storedUsername) {
-        // FIXED: Checks case-insensitively to prevent structural profile drops
+        // FIXED: Lowercase check plus token injection parameters for seamless re-entry lookups
         if (storedUsername.toLowerCase() === "creator_red") {
-          window.location.href = '/admin/terminal';
+          window.location.href = `/admin/terminal?token=${storedToken}`;
         } else {
           window.location.href = '/chat.html';
         }
@@ -121,9 +121,9 @@
           localStorage.setItem('token', data.token);
           localStorage.setItem('username', data.username);
           
-          // FIXED: Lowercase mapping string comparison captures admin users flawlessly
+          // FIXED: Pass the active verification token directly into the page link parameters matrix
           if (data.username.toLowerCase() === "creator_red") {
-            window.location.href = '/admin/terminal';
+            window.location.href = `/admin/terminal?token=${data.token}`;
           } else {
             window.location.href = '/chat.html';
           }
