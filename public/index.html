@@ -46,7 +46,6 @@
       const storedToken = localStorage.getItem('token');
       const storedUsername = localStorage.getItem('username');
       if (storedToken && storedUsername) {
-        // Enforces original uppercase structural checks matching database parameters
         if (storedUsername === "CREATOR_RED") {
           window.location.href = '/admin/terminal';
         } else {
